@@ -104,7 +104,7 @@ flowchart TB
 以 `hornwork` 非 root 用户运行），进程内部是「一个 asyncio 主循环 + 多个工作线程」的混合模型。
 
 | 执行体 | 归属 | 数量/生命周期 | 职责 | 关键配置 |
-|   |   |   |   |   |
+|---|---|---|---|---|
 | asyncio 主循环 | `HornworkDaemon.run()` | 1，常驻 | 总线消费、周期任务、信号处理 | — |
 | 采集线程 | `BaseCollector.start()` | auditd / proc / fim / authlog 各 1 | tail 文件、轮询 `/proc`、inotify、解析 auth 日志 | `collect.*.enabled` |
 | 抓包线程 | `NetPipeline` | 2（抓包 + 处理） | `AF_PACKET` 抓包、解码、flow/tracker、网络规则判定 | `collect.net.*` |
@@ -250,7 +250,7 @@ sequenceDiagram
 ### 3.2 三条旁路流水线
 
 | 流水线 | 入口 | 处理链 | 落库/产物 |
-|   |   |   |   |
+|---|---|---|---|
 | 网络检测 | `NetPipeline` 抓包线程 | `decode()` → `FlowTable.update` → `Tracker` 行为窗口 → `NetRuleSet.evaluate()` | `emit_alert` → `alert` 表；`net_flow` / `net_connect` 事件 → `event` 表 |
 | 静态扫描 | FIM 文件事件 / `hornworkctl scan file` / `ctl scan.file` | `Cascade.scan()`：hash 缓存 → sigdb → yara → clamav（`deep` 才启用 slow 引擎） | `scan_result` / `hash_cache` 表；`engine_stat` 统计 |
 | 在线内存 | `ctl mem.scan` / 验证套件 TC 09 | `parse_maps` → 可疑段 `pread` → 条件 A（匿名 RWX/memfd）+ 条件 B（10 s 内新连接或线程 +5） | `mem_hits` / `mem_scan` 表；快照写 `raw/mem/` |
@@ -286,7 +286,7 @@ daemon 的 `ScanWindowGate` 每 10 s 刷新活跃窗口；`NetRuleSet` 求值时
   方法表（`HornworkDaemon._build_handlers()`，共 24 个）：
 
 | 分组 | method | 说明 |
-|   |   |   |
+|---|---|---|
 | 状态 | `status` | 版本、pid、主机、采集器、引擎、总线、Sigma、计数、ctl、web |
 | 查询 | `events.query` | `{type,since,limit,layer}` → `{events:[...]}` |
 | 查询 | `alerts.query` | `{since,level,technique,rule_ids,limit}` → `{alerts:[...]}` |
@@ -332,7 +332,7 @@ CLI 的降级路径（`hornwork/cli.py`）：
   主要路由：
 
 | 类型 | 路由 |
-|   |   |
+|---|---|
 | 健康与指标 | `GET /healthz`、`GET /metrics`（Prometheus 文本） |
 | 安全运营 | `GET /api/overview`、`/api/events`、`/api/alerts`、`/api/rules`、`/api/intel`、`/api/cases`、`/api/validate`、`/api/engine stats`、`/api/export` |
 | 平台与子系统 | `GET /api/platform/security`、`/api/integration/status`、`/api/lab/envs`、`/api/vuln/records`、`/api/harden/status` |
@@ -354,7 +354,7 @@ CLI 的降级路径（`hornwork/cli.py`）：
 `source_layer`、`source_product`、`event_type`、`host.host_id`。
 
 | 字段 | 类型 | 说明 |
-|   |   |   |
+|---|---|---|
 | `event_id` | string | UUIDv4，事件主键（`event` 表 PK，`INSERT OR IGNORE` 幂等） |
 | `ts` | string | UTC ISO8601，如 `2026 10 26T12:00:00.123Z` |
 | `source_layer` | enum | `host / net / memory / static / scan` |
@@ -390,7 +390,7 @@ scan_task       scan_finding  scan_window
 由 `schema.new_alert(rule, ...)` 构造，可由事件/实体/时间触发。
 
 | 字段 | 说明 |
-|   |   |
+|---|---|
 | `alert_id` | UUIDv4，告警主键 |
 | `ts` | 继承事件时间或显式传入 |
 | `rule` | `{id, name, engine, version, level, mitre[]}` |
@@ -430,7 +430,7 @@ score 当 1–15 的 level 用。
 核心表（`store.DDL`，15 张）：
 
 | 表 | 主键/唯一约束 | 用途 |
-|   |   |   |
+|---|---|---|
 | `event` | PK `event_id`；索引 `ts`、`(event_type, ts)`、`(host_id, ts)` | 统一事件 |
 | `alert` | PK `alert_id`；UNIQUE `(dedup_key, substr(ts,1,16))` | 检测告警 |
 | `scan_result` | 自增 `id`；索引 `sha256`、`ts` | 单文件级联扫描结果 |
@@ -595,7 +595,7 @@ flowchart TD
 ### 9.6 其他取舍
 
 | 决策 | 理由 | 代价 |
-|   |   |   |
+|---|---|---|
 | 事件/告警用普通 `dict` + 校验函数，不用 ORM/数据类 | 序列化直接、跨模块零拷贝、单测易构造 | 字段错误要到运行期才暴露，靠 `validate_*` 兜底 |
 | 总线队列满即丢弃并计数 | 检测平台不能被慢消费者拖死 | 极端流量下会丢事件，需看 `dropped` 指标 |
 | 取证/扫描/ClamAV 走子进程 | 崩溃隔离、超时可控、避免 Python C 扩展风险 | 进程启动开销；依赖外部二进制 |
@@ -614,7 +614,7 @@ flowchart TD
 ## 11. 相关文档
 
 | 文档 | 内容 |
-|   |   |
+|---|---|
 | `docs/CONTRACT.md` | 内部接口契约（函数签名、数据结构、集成方式） |
 | `docs/interfaces.md` | 接口与数据模型的可读说明 |
 | `docs/rules.md` | 规则库与热加载 |
