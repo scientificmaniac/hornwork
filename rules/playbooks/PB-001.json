@@ -1,0 +1,14 @@
+{
+  "id": "PB-001",
+  "name": "可疑样本处置",
+  "version": "1.0",
+  "description": "对静态扫描判 malicious 的样本执行隔离、取证、开工单的标准处置流程；当判定为 benign 时按回滚项恢复文件。",
+  "steps": [
+    {"id": "s1", "action": "quarantine_file", "mode": "enforce", "timeout": 30},
+    {"id": "s2", "action": "collect_forensics", "mode": "observe", "params": {"include": ["process", "network", "file"]}},
+    {"id": "s3", "action": "open_case", "params": {"severity": "P2"}}
+  ],
+  "rollback": [
+    {"action": "restore_file", "when": "verdict == benign"}
+  ]
+}

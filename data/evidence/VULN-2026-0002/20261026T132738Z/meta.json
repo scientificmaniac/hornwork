@@ -1,0 +1,39 @@
+{
+  "vuln_id": "VULN-2026-0002",
+  "cve": "CVE-2022-22947",
+  "env_id": "spring/CVE-2022-22947",
+  "lab_run_id": "lab-b8b650fbc734",
+  "started_at": "2026-10-26T13:27:35.682Z",
+  "finished_at": "2026-10-26T13:27:45.779Z",
+  "host_bind": "127.0.0.1",
+  "ports": {
+    "5005": 18000,
+    "8080": 18001
+  },
+  "repo_digests": {
+    "vulhub/spring-cloud-gateway:3.1.0": "[\"vulhub/spring-cloud-gateway@sha256:3160a18d9e00fe9df2ef8f0b0bf9852ad0f89cf769ae4caec1601b0f105f9d7c\"]"
+  },
+  "repro": {
+    "ok": true,
+    "steps": [
+      "actuator",
+      "route_add",
+      "refresh",
+      "trigger",
+      "cleanup"
+    ],
+    "evidence": [
+      "request.txt",
+      "command.txt"
+    ]
+  },
+  "cleanup": {
+    "down_ok": true,
+    "freed_ports": [
+      18000,
+      18001
+    ],
+    "listening_after_cleanup": "State  Recv-Q Send-Q Local Address:Port  Peer Address:Port\nLISTEN 0      4096       127.0.0.1:631        0.0.0.0:*   \nLISTEN 0      5          127.0.0.1:8787       0.0.0.0:*   \nLISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*   \nLISTEN 0      511        127.0.0.1:14122      0.0.0.0:*   \nLISTEN 0      511        127.0.0.1:38324      0.0.0.0:*   \nLISTEN 0      1024       127.0.0.1:11211      0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8000       0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8002       0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8005       0.0.0.0:*   \nLISTEN 0      4096       127.0.0.1:7890       0.0.0.0:*   \nLISTEN 0      4096         0.0.0.0:22         0.0.0.0:*   \nLISTEN 0      4096      127.0.0.54:53         0.0.0.0:*   \nLISTEN 0      4096           [::1]:631           [::]:*   \nLISTEN 0      4096            [::]:22            [::]:*   \nLISTEN 0      511                *:80               *:*   \n"
+  },
+  "operator": "kxfz"
+}

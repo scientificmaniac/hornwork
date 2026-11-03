@@ -1,0 +1,272 @@
+# Hornwork 全量配置
+# 运行环境：Ubuntu 24.04 / 26.04
+
+[general]
+host_id = "lab-host"            # 主机标识，须与 `hostname -s` 一致
+hostname = "lab-host"
+os_name = "ubuntu-24.04"
+timezone = "UTC"
+data_dir = "/var/lib/hornwork"
+raw_dir = "/opt/hornwork/raw"
+rule_dir = "/opt/hornwork/rules"
+log_level = "INFO"
+app_log = "/var/log/hornwork/app.jsonl"
+
+[collect.auditd]
+enabled = true
+log_path = "/var/log/audit/audit.log"
+keys = ["hornwork_exec", "hornwork_identity", "hornwork_persist"]
+assemble_window_ms = 2000
+
+[collect.proc]
+enabled = true
+interval_ms = 1000
+conn_scan = true
+
+[collect.fim]
+enabled = true
+dirs = ["/etc", "/usr/local/bin", "/tmp", "/var/www"]
+debounce_ms = 300
+max_watches = 20000
+baseline = true
+
+[collect.auth]
+enabled = true
+source = "file"                 # file | journal
+path = "/var/log/auth.log"
+journal_unit = "ssh"
+bruteforce_threshold = 5
+bruteforce_window_sec = 300
+
+[collect.net]
+enabled = true
+iface = "any"                   # any = lo + 默认网卡分别抓
+bpf = "ip"
+pcap_dump = false
+snaplen = 65535
+rcvbuf_mb = 8
+emit_flow_event = true
+flow_event_interval_sec = 5
+
+[engines]
+order = ["hash", "sigdb", "yara", "clamav"]
+deep_default = false
+stop_score = 90
+max_size_mb = 100
+yara_rule_dir = "/opt/hornwork/rules/yara"
+net_rule_dir = "/opt/hornwork/rules/net"
+host_rule_dir = "/opt/hornwork/rules/host"
+sigma_rule_dir = "/opt/hornwork/rules/sigma"
+
+[engines.sigma]
+# SigmaHQ 的 Linux 规则大量是 status: test。严格口径是跳过 test，
+# 但那样 66 条里只有约 20 条参与匹配。演示取 true 扩大覆盖；
+# 需要严格复现文档口径时改成 false 并 reload。
+include_status_test = true
+
+[engines.sigdb]
+hash_file = "/opt/hornwork/rules/sigdb/hashes.txt"
+hex_file = "/opt/hornwork/rules/sigdb/hex.txt"
+regex_file = "/opt/hornwork/rules/sigdb/regex.txt"
+entropy_threshold = 7.2
+entropy_min_size = 4096
+regex_timeout_ms = 200
+regex_max_len = 2048
+
+[engines.clamav]
+socket = "/var/run/clamav/clamd.ctl"
+timeout_sec = 30
+chunk_kb = 1024
+unavailable_backoff_sec = 60
+
+[scan]
+workers = 4
+budget_sec = 60
+skip_dirs = ["/proc", "/sys", "/dev", "/run"]
+whitelist_paths = ["/usr/lib", "/var/lib/apt"]
+watch_on_file_event = true
+
+# ---------------------------------------------------------------------------
+# 扫描模块：定期漏洞扫描
+# 用户决策（v2）：端口发现与服务版本识别直接复用 nmap（-sV + XML），不再自研
+# connect/banner；编排、归一、CVE 区间匹配、快照差异、覆盖率与报告全部自研。
+# 合法性硬边界：只允许回环与本机地址，越界一律拒绝并写 action_audit。
+# ---------------------------------------------------------------------------
+enabled = true
+allow_cidrs = ["127.0.0.1/32", "192.168.234.135/32"]
+local_ips = ["127.0.0.1", "192.168.234.135"]   # 写入 scan_window.src_ips，供检测模块判定自扫流量
+window_suppress_rules = ["N-0101", "N-0102", "N-0104", "N-0105"]  # 窗口内只降级扫描类规则
+engine_timeout_sec = 900
+feed_dir = "/var/lib/hornwork/feed"
+report_dir = "/opt/hornwork/reports/scan"
+
+[scan.nmap]
+bin = "nmap"
+timing = "T4"
+version_intensity = 7
+max_retries = 2
+
+[scan.pkgs]
+bin = "dpkg-query"
+backend = "local"                  # 单机部署本机 dpkg；双机拓扑改 ssh + [scan.pkgs].ssh_key
+ssh_key = ""
+fact_filter = "mapped"      # mapped=只留有 CPE 映射的安全组件；all=全量
+
+[scan.lynis]
+bin = "lynis"
+
+[scan.testssl]
+bin = "testssl.sh"
+
+[scan.nuclei]
+bin = "nuclei"
+templates = "/opt/hornwork/rules/nuclei"   # 测试环境自带最小模板集
+rate_limit = 50
+timeout_sec = 10
+
+[scan.self]
+declared_ports = [22, 80, 443, 631, 8787, 8080, 8443]
+
+[scan.gates]
+window_start = "02:00"
+window_end = "05:00"
+max_hosts = 4
+pps = 500
+min_disk_gb = 1
+window_grace_sec = 600             # 扫描窗口事件有效期（秒），检测模块据此降级自扰告警
+
+[scan.rules]
+comp_map = "/opt/hornwork/rules/scan/comp_map.csv"
+cve_exclude = "/opt/hornwork/rules/scan/cve_exclude.csv"
+
+[scan.coverage]
+role_domains = {}
+weights = { D1 = 0.15, D2 = 0.30, D3 = 0.20, D4 = 0.15, D5 = 0.10, D6 = 0.10 }
+
+[net]
+home_net = "192.168.234.0/24"
+flow_timeout_sec = 120
+max_flows = 200000
+tracker_window_sec = 5
+dedup_sec = 60
+ioc_ip_set = "ioc_ips"
+ioc_domain_set = "ioc_domains"
+
+[host]
+baseline_path = "/var/lib/hornwork/baseline.json"
+persist_whitelist = ["/etc/cron.d/hornwork-test"]
+persist_paths = [
+  "/etc/cron.d", "/etc/crontab", "/var/spool/cron", "/etc/systemd/system",
+  "/etc/rc.local", "/etc/profile.d", "/root/.bashrc", "/home",
+  "/etc/ld.so.preload", "/etc/sudoers.d",
+]
+check_interval_sec = 60
+suid_scan_dirs = ["/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin"]
+
+[memory]
+max_region = 1048576
+interval_sec = 0
+min_size = 4096
+whitelist_paths = ["/usr/lib", "/usr/bin", "/usr/local/lib"]
+
+[intel]
+ioc_ttl_days = { ip = 30, domain = 90, hash = 0, url = 30, filename = 90 }
+min_confidence_rule = 60
+min_confidence_block = 80
+feed_dir = "/opt/hornwork/rules/ioc"
+bundle_dir = "/opt/hornwork/rules/intel"
+
+[respond]
+default_mode = "observe"        # observe | dry-run | enforce
+approval_required = true
+action_timeout_sec = 30
+quarantine_dir = "/var/lib/hornwork/quarantine"
+management_ip = ""
+playbook_dir = "/opt/hornwork/rules/playbooks"
+
+[verify]
+suite = "baseline"
+window_sec = 60
+clock_skew_max_sec = 2
+simulate_dir = ""
+report_dir = "/opt/hornwork/reports"
+settle_sec = 3
+
+[forensics]
+work_dir = "/data/forensics"
+avml_bin = "/opt/forensics/bin/avml"
+vol_bin = "/opt/vol3/bin/vol"
+symbol_dir = "/opt/symbols"
+max_capture_mb = 0
+
+[web]
+enabled = true
+bind = "127.0.0.1"
+port = 8787
+token_env = "HORNWORK_TOKEN"
+token = ""
+
+[ctl]
+socket = "/run/hornwork/ctl.sock"
+mode = 0o660
+group = "adm"
+
+[bus]
+event_queue_max = 100000
+frame_queue_max = 20000
+detect_queue_max = 5000
+dlq_retry = 3
+
+# ---------------------------------------------------------------------------
+# 靶场模块：Vulhub 靶场编排 + 漏洞档案
+# 单机部署：backend = "local"，靶场主机角色由本机 Docker 承担（端口只绑 127.0.0.1）。
+# 双机拓扑：backend = "ssh"，由 sshrunner 连 靶场主机 192.168.56.20 执行 compose。
+# ---------------------------------------------------------------------------
+[lab]
+backend = "local"
+vulhub_root = "/opt/vulhub"
+overrides_dir = "/opt/lab/overrides"
+state_file = "/opt/lab/state.json"
+data_dir = "/opt/hornwork/data"
+index_path = "/opt/hornwork/data/vulhub-index.json"
+evidence_dir = "/opt/hornwork/data/evidence"
+host_bind = "127.0.0.1"
+max_envs = 2
+min_mem_mb = 800
+min_disk_gb = 5
+default_ttl_min = 90
+pull_timeout_sec = 600
+up_timeout_sec = 180
+healthy_timeout_sec = 120
+health_poll_sec = 2
+port_range = [18000, 18999]
+target_whitelist = ["127.0.0.1", "192.168.56.20"]
+
+[lab.ssh]
+host = "192.168.56.20"
+user = "lab"
+key = "~/.ssh/id_ed25519_lab"
+connect_timeout = 5
+remote_vulhub_root = "/opt/vulhub"
+remote_overrides_dir = "/opt/lab/overrides"
+
+[vuln]
+records_dir = "/opt/hornwork/data/records"
+templates_dir = "/opt/hornwork/data/templates"
+evidence_dir = "/opt/hornwork/data/evidence"
+index_path = "/opt/hornwork/data/vulhub-index.json"
+min_references = 2
+
+# ---------------------------------------------------------------------------
+# 认证模块：三因子认证（口令 + TOTP + 人脸模板保护）
+# 密钥与库分离存储：轮换 auth.key = 全体生物模板撤销；pepper 丢失 = 全体口令不可验证。
+# ---------------------------------------------------------------------------
+[auth]
+key_path = "/var/lib/hornwork/auth/auth.key"
+pepper_path = "/var/lib/hornwork/auth/auth.pepper"
+key_id = 1
+db_path = ""                    # 空 = 共用 /var/lib/hornwork/hornwork.db
+challenge_ttl_sec = 120
+strong_auth_window_sec = 900
+
+

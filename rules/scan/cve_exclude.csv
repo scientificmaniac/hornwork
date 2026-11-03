@@ -1,0 +1,6 @@
+cve_id,comp_norm,version,reason
+# 用途：NVD/CPE 区间命中但"该版本实际不受影响"时的人工排除项（误报治理，文档 §4.8）。
+# 典型场景：Ubuntu/Debian 把补丁回移到旧版本号（改代码不改版本号）→ 包级 OVAL 优先已能覆盖大部分，
+#           本表用于 OVAL 缺失或 CPE 区间过宽时的定点排除。
+# 格式：cve_id,comp_norm,version,reason；version 留空 = 该组件该 CVE 的全部版本都排除。
+# 原则：只写已确证（能给出公告/commit/包版本证据）的条目；未确证不写，避免"为了降误报而漏报"。

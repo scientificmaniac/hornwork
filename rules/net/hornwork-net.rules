@@ -1,0 +1,87 @@
+# Hornwork 网络检测规则（起步 8 条）
+# 来源：模块1开发思路-v5-实施版.md §4.3.6 原文逐条照抄，语法与字段名不得改动。
+# 解析器：hornwork/engines/netrules.py（NetRuleSet）
+# 约定：rule_id 固定 N-0101 ~ N-0108；dst_domain_in/dst_ip_in 的集合名与
+#       config.toml [net] ioc_domain_set / ioc_ip_set 一致（ioc_domains / ioc_ips）。
+
+rule N-0101 syn_scan {
+  proto: tcp
+  flags: syn
+  not_flags: ack
+  window: 5s
+  group_by: src_ip, dst_ip
+  count_distinct: dst_port >= 20
+  severity: 8
+  technique: T1046
+  msg: "SYN 端口扫描"
+}
+
+rule N-0102 xmas_null_scan {
+  proto: tcp
+  flags_any_of: [fin, urg]
+  not_flags: ack
+  severity: 7
+  technique: T1046
+  msg: "XMAS/NULL 类异常 flag 扫描"
+}
+
+rule N-0103 ioc_outbound {
+  proto: any
+  dst_domain_in: ioc_domains
+  severity: 10
+  technique: T1071.001
+  msg: "出站命中威胁情报域名"
+}
+
+rule N-0104 icmp_sweep {
+  proto: icmp
+  icmp_type: 8
+  window: 5s
+  group_by: src_ip
+  count_distinct: dst_ip >= 10
+  severity: 6
+  technique: T1018
+  msg: "ICMP 主机扫描"
+}
+
+rule N-0105 lateral_smb {
+  proto: tcp
+  dst_port_in: [445, 139]
+  src_cidr: 192.168.56.0/24
+  dst_cidr: 192.168.56.0/24
+  window: 60s
+  group_by: src_ip
+  count_distinct: dst_ip >= 3
+  severity: 9
+  technique: T1021.002
+  msg: "内网 SMB 横向连接"
+}
+
+rule N-0106 c2_heartbeat {
+  proto: tcp
+  window: 600s
+  group_by: src_ip, dst_ip
+  count: packets >= 10
+  avg_interval_between: 30s, 90s
+  severity: 6
+  technique: T1071
+  msg: "可疑心跳式外联（仅标记）"
+}
+
+rule N-0107 malformed_packet {
+  proto: any
+  malformed: true
+  severity: 4
+  msg: "协议畸形报文"
+}
+
+rule N-0108 large_upload {
+  proto: tcp
+  direction: outbound
+  window: 60s
+  group_by: src_ip, dst_ip
+  sum_bytes: >= 52428800
+  severity: 6
+  technique: T1041
+  msg: "单向外发流量异常（疑似外传）"
+}

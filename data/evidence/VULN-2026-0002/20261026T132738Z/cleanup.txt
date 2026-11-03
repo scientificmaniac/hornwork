@@ -1,0 +1,22 @@
+# 清理记录
+时间：2026-10-26T13:27:45.776Z
+lab down：{"ok": true, "env_id": "spring/CVE-2022-22947", "elapsed_ms": 2416, "run_id": "lab-1987f9947a1b", "freed_ports": [18000, 18001], "cleanup_ok": true, "rc": 0, "detail": "compose down keep_volume=False rc=0"}
+
+## 剩余监听端口检查
+State  Recv-Q Send-Q Local Address:Port  Peer Address:Port
+LISTEN 0      4096       127.0.0.1:631        0.0.0.0:*   
+LISTEN 0      5          127.0.0.1:8787       0.0.0.0:*   
+LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*   
+LISTEN 0      511        127.0.0.1:14122      0.0.0.0:*   
+LISTEN 0      511        127.0.0.1:38324      0.0.0.0:*   
+LISTEN 0      1024       127.0.0.1:11211      0.0.0.0:*   
+LISTEN 0      2048       127.0.0.1:8000       0.0.0.0:*   
+LISTEN 0      2048       127.0.0.1:8002       0.0.0.0:*   
+LISTEN 0      2048       127.0.0.1:8005       0.0.0.0:*   
+LISTEN 0      4096       127.0.0.1:7890       0.0.0.0:*   
+LISTEN 0      4096         0.0.0.0:22         0.0.0.0:*   
+LISTEN 0      4096      127.0.0.54:53         0.0.0.0:*   
+LISTEN 0      4096           [::1]:631           [::]:*   
+LISTEN 0      4096            [::]:22            [::]:*   
+LISTEN 0      511                *:80               *:*   
+

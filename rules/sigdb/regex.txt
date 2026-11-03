@@ -1,0 +1,11 @@
+# Hornwork 自研演示签名库：正则签名
+# 格式：每行 "正则 | 名称 | 评分"；# 开头为注释；正则用 Python re，长度 ≤ 2048 字节。
+# 说明：仅覆盖演示场景中的通用可疑特征，不针对真实恶意家族。
+\/dev\/(tcp|udp)\/[0-9]{1,3}(\.[0-9]{1,3}){3}\/[0-9]{1,5} | reverse-shell-dev-tcp | 60
+(wget|curl)\s+[^\n|]{0,200}\|\s*(ba|z|k)?sh | download-pipe-shell | 60
+base64\s+(-d|--decode)\s*\|\s*(ba|z)?sh | base64-pipe-shell | 60
+eval\s*\(\s*\$_((POST|GET|REQUEST|COOKIE)) | webshell-eval-superglobal | 60
+stratum\+(tcp|ssl):// | mining-pool-url | 60
+LD_PRELOAD\s*= | ld-preload-inject | 60
+chmod\s+(\+x|[0-7]{3,4})\s+\/(tmp|dev\/shm|var\/tmp)\/ | chmod-tmp-exec | 60
+(^|\n)\s*@reboot\s+.*(curl|wget|bash|sh)\b | cron-reboot-persist | 60

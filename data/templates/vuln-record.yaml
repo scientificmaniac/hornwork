@@ -1,0 +1,51 @@
+# Hornwork 漏洞档案模板
+#
+# 用法：复制本文件到 data/records/VULN-<年>-<4位>.yaml，按下表填字段；
+#       必填 18 项缺一不可（vuln.record add 会拒绝入库）。
+# 事实来源：NVD API 2.0 / 厂商安全公告 / Vulhub 对应目录 README，禁止编造编号与版本。
+# 校验：cvss_score 必须等于 vuln.cvss.calculate(cvss_vector)，severity 必须等于分档结果；
+#       status=verified 时 evidence 非空且每条含 path + sha256 + ts（sha256 复核通过）。
+#
+# 字段速查（21 个顶层字段）：
+#   id/cve .................. VULN-<年>-<4位> / CVE-<年>-<4位以上>（未知写 CVE-XXXX-XXXXX 且 status=draft）
+#   title/component ......... 组件+类型名 / 组件名（来自 compose 镜像 tag 或 README）
+#   affected_versions ....... 区间列表 [{scheme: semver|deb|generic, introduced, fixed, exclude, distro?}]
+#   cwe ..................... CWE 编号 + 中文名（NVD 主分类；次要分类写进括号）
+#   cvss_vector/cvss_score/severity ... 向量 / 计算值（1 位小数）/ 分档（严重/高/中/低/无）
+#   attack_path/preconditions ......... 编号步骤（入口→效果）/ 前置条件（未授权？可达？需交互？）
+#   repro_steps ............. [{cmd, expect}] 一条可重放命令 + 明确预期，靶场端口用 <LAB_PORT>
+#   evidence ................ [{path, sha256, ts}] 复现证据（draft 可为空，verified 必须非空）
+#   fix ..................... {patch_version（必填）, config_mitigation: [], detection_rule}
+#   references .............. ≥2 条 HTTP(S) 链接（NVD + 厂商公告 + Vulhub）
+#   attack_technique ........ ATT&CK 编号，如 T1190（可选）
+#   lab ..................... {kind: server|client, path: <Vulhub 相对路径>, ports: [容器端口]}
+#   status .................. draft（待复现）/ verified（证据已复核）/ published（对外发布）
+#   owner ................... 责任人
+#   created_at/updated_at ... UTC ISO8601，save_record 写入时自动补
+id: VULN-YYYY-NNNN
+cve: CVE-XXXX-XXXXX
+title: ""
+component: ""
+affected_versions:
+  - {scheme: semver, introduced: "", fixed: "", exclude: []}
+cwe: "CWE-xxx 名称"
+cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+cvss_score: 9.8
+severity: 严重
+attack_path: []
+preconditions: []
+repro_steps:
+  - {cmd: "curl -s -i http://127.0.0.1:<LAB_PORT>/", expect: "HTTP 200 且含组件特征"}
+evidence: []
+fix:
+  patch_version: ""
+  config_mitigation: []
+  detection_rule: "检测模块 H-0001/N-0101（异常请求/流量）"
+references:
+  - "https://nvd.nist.gov/vuln/detail/CVE-XXXX-XXXXX"
+attack_technique: T1190
+lab: {kind: server, path: "", ports: []}
+status: draft
+owner: "靶场模块"
+created_at: ""
+updated_at: ""

@@ -1,0 +1,16 @@
+# 漏洞扫描 外部依赖版本锁（参考环境：Ubuntu 26.04 LTS / Python 3.14）
+#
+# 版本号一律占位，安装时取当日 release 并写 versions.lock，本文件是
+# 参考环境实际安装版本，复现时以 apt 源当日版本为准（同一 apt 源内应一致）。
+# 格式：组件 | 版本 | 引入方式 | 用途 | 许可证
+nmap|7.98+dfsg-1|apt install nmap|D1 端口发现 / D3 服务版本与 CPE|GPL-2.0（独立进程调用）
+lynis|3.1.6-1|apt install lynis|D4 主机配置基线（hardening index + warning）|GPL-3.0（独立进程调用）
+nuclei|未安装（GitHub 不可达）|release 二进制|D6 Web/应用 PoC|MIT（独立进程；不可用时 available()=False）
+testssl.sh|未安装（GitHub 不可达）|git clone|D5 TLS 配置|GPL-2.0（独立进程；不可用时 available()=False）
+python|3.14.4|系统 + venv|运行时|PSF-2.0
+sqlite|3.46|系统|存储（WAL）|Public Domain
+openssh|10.2p1 Ubuntu-2ubuntu3.8|系统包（被扫对象）|D1/D3 组件|BSD
+nginx|1.28.3-2ubuntu1.11|系统包（被扫对象）|D2/D3 组件|BSD-2-Clause
+openssl|3.5.5-1ubuntu3.7|系统包（被扫对象）|D2 组件|Apache-2.0
+NVD CVE JSON 2.0|2026-10 快照|API 定向抓取（tools/fetch_cve_data.sh）|D3 CVE 区间|NVD 使用条款
+Ubuntu OVAL noble|2026-10-25|Canonical 官方文件|D2 包级修复版本|Canonical 条款

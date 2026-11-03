@@ -1,0 +1,22 @@
+{
+  "id": "H-0007",
+  "name": "SUID 权限变更",
+  "level": 9,
+  "mitre": ["T1548.001"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["process_create"],
+  "condition": {
+    "all": [
+      {"field": "process.image", "op": "regex", "value": "(^|/)chmod$"},
+      {
+        "any": [
+          {"field": "process.cmdline", "op": "contains", "value": "u+s"},
+          {"field": "process.cmdline", "op": "contains", "value": "g+s"},
+          {"field": "process.cmdline", "op": "regex", "value": "chmod\\s+[0-7]{0,3}[4-7][0-7]{2}\\s"}
+        ]
+      }
+    ]
+  },
+  "description": "通过 chmod 设置 SUID/SGID（含 4xxx/2xxx 八进制模式），对应 persist 的 suid_new 检查。"
+}

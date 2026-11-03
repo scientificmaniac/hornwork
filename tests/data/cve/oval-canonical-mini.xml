@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  测试夹具（非真实 OVAL 数据）：模拟 Canonical（Ubuntu 24.04 noble）官方 OVAL 的真实形态，
+  只保留关键结构，用于回归"变量引用解析"这个真实文件的失败点：
+
+  1) 默认命名空间 + linux-def 前缀；
+  2) <linux-def:dpkginfo_object> 里包名是 <linux-def:name var_ref="..."/>，真实文本在
+     后面的 <variables> 段（variables 在 objects/states 之后 → 必须后处理）；
+  3) 部分 <linux-def:dpkginfo_test> 只有 object_ref、没有 state_ref（仅判包是否存在，
+     没有修复版本），这类应计入 skipped 而不是 error；
+  4) vulnerability 定义通过 <extend_definition> 引用 patch 定义（apt patch 边界）；
+  5) 变量多值（at least one）与 var_ref 悬空（找不到变量）两种边界。
+
+  CVE-2099-12345/12346/12347/12348/12349 为明显虚构的夹具编号，不对应真实漏洞。
+-->
+<oval_definitions
+    xmlns="http://oval.mitre.org/XMLSchema/oval-definitions-5"
+    xmlns:linux-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#linux"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd">
+  <generator>
+    <product_name>Canonical OVAL fixture (sentinel tests)</product_name>
+    <schema_version>5.11</schema_version>
+  </generator>
+  <definitions>
+    <definition class="vulnerability" id="oval:com.ubuntu.noble:def:20990000001" version="1">
+      <metadata>
+        <title>CVE-2099-12345 测试夹具（非真实漏洞，变量引用形态）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+          <product>gcc-arm-none-eabi</product>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-12345"
+                   ref_url="https://example.invalid/CVE-2099-12345"/>
+        <description>gcc-arm-none-eabi before 2.47-1ubuntu0.24.04.1 (fixture)</description>
+      </metadata>
+      <criteria operator="OR">
+        <criterion test_ref="oval:com.ubuntu.noble:tst:2006100010000000"/>
+      </criteria>
+    </definition>
+    <definition class="vulnerability" id="oval:com.ubuntu.noble:def:20990000002" version="1">
+      <metadata>
+        <title>CVE-2099-12346 测试夹具（非真实漏洞，仅"包是否存在"测试）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-12346"/>
+      </metadata>
+      <criteria operator="OR">
+        <criterion test_ref="oval:com.ubuntu.noble:tst:2006100020000000"/>
+      </criteria>
+    </definition>
+    <definition class="vulnerability" id="oval:com.ubuntu.noble:def:20990000003" version="1">
+      <metadata>
+        <title>CVE-2099-12347 测试夹具（非真实漏洞，extend_definition 组合）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-12347"/>
+      </metadata>
+      <criteria operator="AND">
+        <criteria operator="OR">
+          <extend_definition definition_ref="oval:com.ubuntu.noble:def:20990000999"/>
+        </criteria>
+      </criteria>
+    </definition>
+    <definition class="vulnerability" id="oval:com.ubuntu.noble:def:20990000004" version="1">
+      <metadata>
+        <title>CVE-2099-12348 测试夹具（非真实漏洞，变量多值）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-12348"/>
+      </metadata>
+      <criteria operator="OR">
+        <criterion test_ref="oval:com.ubuntu.noble:tst:2006100040000000"/>
+      </criteria>
+    </definition>
+    <definition class="vulnerability" id="oval:com.ubuntu.noble:def:20990000005" version="1">
+      <metadata>
+        <title>CVE-2099-12349 测试夹具（非真实漏洞，var_ref 悬空）</title>
+        <affected family="unix">
+          <platform>Ubuntu 24.04 LTS</platform>
+        </affected>
+        <reference source="CVE" ref_id="CVE-2099-12349"/>
+      </metadata>
+      <criteria operator="OR">
+        <criterion test_ref="oval:com.ubuntu.noble:tst:2006100050000000"/>
+      </criteria>
+    </definition>
+    <definition class="patch" id="oval:com.ubuntu.noble:def:20990000999" version="1">
+      <metadata>
+        <title>apt patch definition (fixture, 被 vulnerability 定义 extend 引用)</title>
+        <description>仅作为包定义，被 CVE-2099-12347 引用</description>
+      </metadata>
+      <criteria operator="OR">
+        <criterion test_ref="oval:com.ubuntu.noble:tst:2006100030000000"/>
+      </criteria>
+    </definition>
+  </definitions>
+  <tests>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:2006100010000000" version="1"
+                             check="at least one" comment="gcc-arm-none-eabi">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:2006100010000000"/>
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:2006100010000000"/>
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:2006100020000000" version="1"
+                             check="at least one" comment="仅存在性测试（无 state_ref）">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:2006100020000000"/>
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:2006100030000000" version="1"
+                             check="at least one" comment="openssh-server">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:2006100030000000"/>
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:2006100030000000"/>
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:2006100040000000" version="1"
+                             check="at least one" comment="libpam 变量多值">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:2006100040000000"/>
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:2006100040000000"/>
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:2006100050000000" version="1"
+                             check="at least one" comment="var_ref 悬空（夹具错误形态）">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:2006100050000000"/>
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:2006100050000000"/>
+    </linux-def:dpkginfo_test>
+  </tests>
+  <objects>
+    <linux-def:dpkginfo_object id="oval:com.ubuntu.noble:obj:2006100010000000" version="1">
+      <linux-def:name var_ref="oval:com.ubuntu.noble:var:200224390000000"
+                      var_check="at least one"/>
+    </linux-def:dpkginfo_object>
+    <linux-def:dpkginfo_object id="oval:com.ubuntu.noble:obj:2006100020000000" version="1">
+      <linux-def:name var_ref="oval:com.ubuntu.noble:var:200224390000001"
+                      var_check="at least one"/>
+    </linux-def:dpkginfo_object>
+    <linux-def:dpkginfo_object id="oval:com.ubuntu.noble:obj:2006100030000000" version="1">
+      <linux-def:name>openssh-server</linux-def:name>
+    </linux-def:dpkginfo_object>
+    <linux-def:dpkginfo_object id="oval:com.ubuntu.noble:obj:2006100040000000" version="1">
+      <linux-def:name var_ref="oval:com.ubuntu.noble:var:200224390000001"
+                      var_check="at least one"/>
+    </linux-def:dpkginfo_object>
+    <linux-def:dpkginfo_object id="oval:com.ubuntu.noble:obj:2006100050000000" version="1">
+      <linux-def:name var_ref="oval:com.ubuntu.noble:var:not-found-in-fixture"
+                      var_check="at least one"/>
+    </linux-def:dpkginfo_object>
+  </objects>
+  <states>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:2006100010000000" version="1">
+      <linux-def:evr datatype="evr_string" operation="less than">2.47-1ubuntu0.24.04.1</linux-def:evr>
+    </linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:2006100030000000" version="1">
+      <linux-def:evr datatype="evr_string" operation="less than">1:9.3p1-1ubuntu3</linux-def:evr>
+    </linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:2006100040000000" version="1">
+      <linux-def:evr datatype="evr_string" operation="less than">5.0-1ubuntu1</linux-def:evr>
+    </linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:2006100050000000" version="1">
+      <linux-def:evr datatype="evr_string" operation="less than">3.0-1</linux-def:evr>
+    </linux-def:dpkginfo_state>
+  </states>
+  <variables>
+    <linux-def:variable id="oval:com.ubuntu.noble:var:200224390000000" version="1"
+                        datatype="string" comment="gcc-arm-none-eabi">
+      <linux-def:value>gcc-arm-none-eabi</linux-def:value>
+    </linux-def:variable>
+    <linux-def:variable id="oval:com.ubuntu.noble:var:200224390000001" version="1"
+                        datatype="string" comment="libpam 多值（at least one）">
+      <linux-def:value>libpam0g</linux-def:value>
+      <linux-def:value>libpam-modules</linux-def:value>
+    </linux-def:variable>
+  </variables>
+</oval_definitions>

@@ -1,0 +1,14 @@
+# /etc/logrotate.d/hornwork —— 应用日志轮转
+# 安装：sudo cp deploy/logrotate-hornwork /etc/logrotate.d/hornwork
+# 校验：sudo logrotate --debug /etc/logrotate.d/hornwork
+/var/log/hornwork/app.jsonl {
+    daily
+    rotate 5
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 0640 hornwork adm
+}

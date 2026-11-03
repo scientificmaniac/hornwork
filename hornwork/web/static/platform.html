@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hornwork 控制台</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #eef1f6; color: #1c2430;
+               font-family: "Microsoft YaHei", "Segoe UI", "Ubuntu", sans-serif; font-size: 13px; }
+  a { color: #1f5fbf; text-decoration: none; }
+  .hidden { display: none !important; }
+
+  .login-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center;
+                background: linear-gradient(135deg, #16213c 0%, #1f3864 55%, #2a4f8a 100%); padding: 24px; }
+  .login-card { width: 760px; background: #fff; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.35);
+                display: grid; grid-template-columns: 1.0fr 1.0fr; overflow: hidden; }
+  .login-left { background: #1f3864; color: #fff; padding: 30px 26px; }
+  .login-left h1 { margin: 6px 0 4px; font-size: 20px; letter-spacing: 1px; }
+  .login-left .sub { color: #b9c6dd; font-size: 12px; line-height: 1.7; }
+  .login-left ul { margin: 18px 0 0; padding-left: 18px; color: #d7e0ef; font-size: 12px; line-height: 1.9; }
+  .login-left .foot { margin-top: 26px; font-size: 12px; color: #9fb0cc; }
+  .login-right { padding: 26px 26px 22px; }
+  .login-right h2 { margin: 0 0 4px; font-size: 16px; color: #1f3864; }
+  .login-right .hint { color: #6b7787; font-size: 12px; margin-bottom: 14px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #4a5666; margin-bottom: 4px; }
+  .field input[type=text], .field input[type=password], .field select {
+    width: 100%; padding: 7px 9px; border: 1px solid #c3ccd8; border-radius: 4px; font-size: 13px; background: #fff; }
+  .field input:focus, .field select:focus { outline: none; border-color: #1f5fbf; box-shadow: 0 0 0 2px rgba(31,95,191,.12); }
+  .field .row { display: flex; gap: 6px; }
+  .btn { border: 1px solid #1f3864; background: #1f3864; color: #fff; padding: 7px 14px; border-radius: 4px;
+         font-size: 13px; cursor: pointer; }
+  .btn:hover { background: #274a80; }
+  .btn.ghost { background: #fff; color: #1f3864; }
+  .btn.ghost:hover { background: #eef2f9; }
+  .btn.small { padding: 4px 9px; font-size: 12px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .login-actions { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+  .login-msg { margin-top: 10px; font-size: 12px; min-height: 18px; color: #6b7787; }
+  .login-msg.err { color: #b00020; }
+  .demo-box { margin-top: 14px; border: 1px dashed #b9c6dd; background: #f7f9fd; border-radius: 6px; padding: 10px; }
+  .demo-box .t { font-size: 12px; color: #1f3864; font-weight: 600; margin-bottom: 6px; }
+  .demo-box .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .demo-box .note { margin-top: 6px; font-size: 11px; color: #8a94a3; line-height: 1.6; }
+
+  .app { display: grid; grid-template-columns: 210px 1fr; height: 100%; }
+  .sidebar { background: #16213c; color: #cfd8e6; display: flex; flex-direction: column; }
+  .brand { padding: 16px 16px 12px; border-bottom: 1px solid #24314f; }
+  .brand .n { font-size: 15px; color: #fff; font-weight: 600; letter-spacing: .5px; }
+  .brand .h { font-size: 11px; color: #8fa0bd; margin-top: 3px; }
+  .nav { padding: 10px 8px; flex: 1; overflow: auto; }
+  .nav button { display: block; width: 100%; text-align: left; background: transparent; border: 0;
+                color: #cfd8e6; padding: 9px 12px; border-radius: 5px; font-size: 13px; cursor: pointer; margin-bottom: 2px; }
+  .nav button:hover { background: #1e2c4c; color: #fff; }
+  .nav button.active { background: #2a4f8a; color: #fff; }
+  .nav .grp { font-size: 11px; color: #7f8ea8; padding: 10px 12px 4px; }
+  .side-foot { border-top: 1px solid #24314f; padding: 10px 14px; font-size: 11px; color: #8fa0bd; }
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { height: 54px; background: #fff; border-bottom: 1px solid #dbe2ec; display: flex;
+            align-items: center; gap: 14px; padding: 0 20px; }
+  .topbar .title { font-size: 15px; font-weight: 600; color: #1f3864; }
+  .topbar .meta { margin-left: auto; display: flex; gap: 14px; align-items: center; color: #5b6878; font-size: 12px; }
+  .content { padding: 16px 20px 26px; overflow: auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { background: #fff; border: 1px solid #dbe2ec; border-radius: 6px; padding: 11px 13px; }
+  .card .k { font-size: 12px; color: #6b7787; }
+  .card .v { font-size: 21px; font-weight: 600; color: #1f3864; margin-top: 4px;
+             font-family: Consolas, "Courier New", monospace; }
+  .card .s { font-size: 11px; color: #8a94a3; margin-top: 2px; }
+  .panel { background: #fff; border: 1px solid #dbe2ec; border-radius: 6px; margin-bottom: 14px; }
+  .panel .ph { display: flex; align-items: center; gap: 10px; padding: 10px 13px; border-bottom: 1px solid #e6ebf2; }
+  .panel .ph .h { font-size: 14px; font-weight: 600; color: #1f3864; }
+  .panel .ph .note { font-size: 11px; color: #8a94a3; }
+  .panel .ph .tools { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .panel .pb { padding: 4px 6px 8px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #eef1f6; vertical-align: top; }
+  th { background: #f5f7fb; color: #4a5666; font-weight: 600; white-space: nowrap; }
+  tr:hover td { background: #fafbfe; }
+  td.mono, .mono { font-family: Consolas, "Courier New", monospace; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 11px; line-height: 18px; }
+  .b-high { background: #fdecea; color: #b00020; }
+  .b-mid { background: #fff4e5; color: #a15c00; }
+  .b-low { background: #e8f5e9; color: #1b6e2a; }
+  .b-none { background: #eef1f6; color: #5b6878; }
+  .b-ok { background: #e8f5e9; color: #1b6e2a; }
+  .b-warn { background: #fff4e5; color: #a15c00; }
+  .muted { color: #8a94a3; }
+  .empty { padding: 16px; text-align: center; color: #8a94a3; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } .login-card { grid-template-columns: 1fr; } }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 10px; padding: 6px 12px 10px; font-size: 12px; }
+  .kv .k { color: #6b7787; }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login-wrap">
+  <div class="login-card">
+    <div class="login-left">
+      <div style="font-size:12px;color:#9fb0cc">Hornwork · 纵深防御平台</div>
+      <h1>Hornwork 控制台</h1>
+      <div class="sub">单进程 · Python 标准库 + libyara + ClamAV<br>检测 / 漏洞档案 / 定期扫描 / 身份认证 / 安全加固</div>
+      <ul>
+        <li>检测：主机与网络纵深防御（采集、检测、告警、工单、审计链）</li>
+        <li>漏洞档案：靶场编排与 CVSS / 复现证据</li>
+        <li>定期扫描：nmap 端口服务 + CVE 区间匹配 + 快照 diff + 覆盖率</li>
+        <li>认证：三因子（口令 + 动态码 + 人脸模板）与风险驱动 LOA</li>
+        <li>加固：基线编排、幂等执行、回滚与复测</li>
+      </ul>
+      <div class="foot">登录使用三因子认证，通道经 TLS 加固</div>
+    </div>
+    <div class="login-right">
+      <h2>登录</h2>
+      <div class="hint">账号 + 口令；人脸为可选因子（提供向量则升 LOA3）</div>
+      <div class="field">
+        <label>用户名</label>
+        <input id="lgUser" type="text" placeholder="用户名" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>口令</label>
+        <input id="lgPass" type="password" placeholder="登录口令" autocomplete="current-password">
+      </div>
+
+      <div class="field">
+        <label>来源 IP（可选，默认本机；203.0.113.66 为演示 IOC 地址）</label>
+        <input id="lgIp" type="text" value="127.0.0.1">
+      </div>
+      <div class="field">
+        <label>人脸模板（512 维向量 JSON，可选）</label>
+        <input id="lgFace" type="file" accept=".json,application/json">
+      </div>
+      <div class="login-actions">
+        <button class="btn" id="lgSubmit">登 录</button>
+      </div>
+      <div class="login-msg" id="lgMsg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="appView" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="n">Hornwork</div>
+      <div class="h">纵深防御控制台</div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div id="sideUser">未登录</div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="title" id="pageTitle">总览</div>
+      <div class="meta">
+        <span id="metaLoa" class="muted">-</span>
+        <span id="metaHost" class="muted">-</span>
+        <button class="btn ghost small" id="btnRefresh">刷新</button>
+        <button class="btn small" id="btnLogout">退出</button>
+      </div>
+    </header>
+    <section class="content" id="content"></section>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const state = {
+  session: sessionStorage.getItem('hornwork_session') || '',
+  who: null,
+  vector: null,
+  tab: 'overview'
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v === null || v === undefined ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const ts = (v) => String(v || '').replace('T', ' ').replace('Z', '').slice(0, 19);
+const num = (v) => (v === null || v === undefined || v === '') ? '-' : Number(v).toLocaleString('zh-CN');
+
+async function api(path, options) {
+  const opt = options || {};
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.session) { headers.Authorization = 'Bearer ' + state.session; }
+  const resp = await fetch(path, {
+    method: opt.method || 'GET',
+    headers,
+    body: opt.body ? JSON.stringify(opt.body) : undefined
+  });
+  const text = await resp.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+  if (resp.status === 401 && path.indexOf('/api/auth/login') !== 0) {
+    showLogin('会话已失效，请重新登录');
+    throw new Error('未授权');
+  }
+  if (!resp.ok) {
+    const msg = (data && (data.message || data.detail || data.error)) || ('HTTP ' + resp.status);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function loginMsg(text, isErr) {
+  const el = $('lgMsg');
+  el.textContent = text || '';
+  el.className = 'login-msg' + (isErr ? ' err' : '');
+}
+
+function showLogin(msg) {
+  state.session = '';
+  sessionStorage.removeItem('hornwork_session');
+  $('appView').classList.add('hidden');
+  $('loginView').classList.remove('hidden');
+  if (msg) { loginMsg(msg, true); }
+}
+
+function showApp() {
+  $('loginView').classList.add('hidden');
+  $('appView').classList.remove('hidden');
+  $('metaLoa').textContent = 'LOA ' + (state.who ? state.who.loa : '-');
+  $('sideUser').textContent = state.who && state.who.user ? ('已登录：' + state.who.user.username) : '已登录';
+  buildNav();
+  switchTab('overview');
+}
+
+$('lgFace').addEventListener('change', async () => {
+  const f = $('lgFace').files[0];
+  if (!f) { return; }
+  try {
+    state.vector = JSON.parse(await f.text());
+    loginMsg('已读取人脸向量（' + state.vector.length + ' 维）');
+  } catch (e) { state.vector = null; loginMsg('人脸向量不是合法 JSON', true); }
+});
+
+$('lgSubmit').addEventListener('click', doLogin);
+$('lgPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') { doLogin(); } });
+
+async function doLogin() {
+  const username = $('lgUser').value.trim();
+  const password = $('lgPass').value;
+  if (!username || !password) { loginMsg('请输入用户名与口令', true); return; }
+  $('lgSubmit').disabled = true;
+  loginMsg('认证中…');
+  try {
+    const body = { username, password, ip: ($('lgIp').value || '127.0.0.1').trim() };
+    if (state.vector) { body.embedding = state.vector; }
+    const res = await api('/api/auth/login', { method: 'POST', body });
+    if (!res.ok) {
+      const why = res.status === 'bio_required' ? '需要人脸因子：请载入人脸向量后重试'
+        : (res.reason || res.error || res.status || '登录失败');
+      loginMsg('登录失败：' + why, true);
+      return;
+    }
+    state.session = res.token;
+    sessionStorage.setItem('hornwork_session', state.session);
+    state.who = await api('/api/auth/session');
+    loginMsg('');
+    showApp();
+  } catch (e) {
+    loginMsg('登录失败：' + e.message, true);
+  } finally {
+    $('lgSubmit').disabled = false;
+  }
+}
+
+$('btnLogout').addEventListener('click', async () => {
+  try { await api('/api/auth/logout', { method: 'POST', body: { token: state.session } }); } catch (e) { /* ignore */ }
+  showLogin('已退出登录');
+});
+
+$('btnRefresh').addEventListener('click', () => switchTab(state.tab));
+
+const TABS = [
+  { id: 'overview', name: '总览' },
+  { id: 'm1', name: '检测 · 纵深防御' },
+  { id: 'm2', name: '漏洞档案' },
+  { id: 'm3', name: '定期扫描' },
+  { id: 'm4', name: '身份认证' },
+  { id: 'm5', name: '安全加固' },
+  { id: 'security', name: '平台安全' }
+];
+
+function buildNav() {
+  const nav = $('nav');
+  nav.innerHTML = '';
+  TABS.forEach((t, i) => {
+    if (i === 1) {
+      const g = document.createElement('div');
+      g.className = 'grp';
+      g.textContent = '功能域';
+      nav.appendChild(g);
+    }
+    const b = document.createElement('button');
+    b.textContent = t.name;
+    b.dataset.tab = t.id;
+    b.addEventListener('click', () => switchTab(t.id));
+    nav.appendChild(b);
+  });
+}
+
+function markNav() {
+  Array.prototype.forEach.call($('nav').querySelectorAll('button'), (b) => {
+    b.classList.toggle('active', b.dataset.tab === state.tab);
+  });
+  const tab = TABS.find((t) => t.id === state.tab);
+  $('pageTitle').textContent = tab ? tab.name : '';
+}
+
+async function switchTab(id) {
+  state.tab = id;
+  markNav();
+  const c = $('content');
+  c.innerHTML = '<div class="empty">加载中…</div>';
+  try {
+    if (id === 'overview') { await renderOverview(c); }
+    else if (id === 'm1') { await renderM1(c); }
+    else if (id === 'm2') { await renderM2(c); }
+    else if (id === 'm3') { await renderM3(c); }
+    else if (id === 'm4') { await renderM4(c); }
+    else if (id === 'm5') { await renderM5(c); }
+    else if (id === 'security') { await renderSecurity(c); }
+  } catch (e) {
+    c.innerHTML = '<div class="panel"><div class="pb"><div class="empty">加载失败：' + esc(e.message) + '</div></div></div>';
+  }
+}
+
+function table(headers, rows, opts) {
+  const o = opts || {};
+  if (!rows || !rows.length) { return '<div class="empty">暂无数据</div>'; }
+  let html = '<table><thead><tr>' + headers.map((h) => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>';
+  rows.forEach((r) => {
+    html += '<tr>' + r.map((c) => '<td' + (o.mono ? ' class="mono"' : '') + '>' + (c === null || c === undefined ? '-' : c) + '</td>').join('') + '</tr>';
+  });
+  return html + '</tbody></table>';
+}
+
+function panel(title, note, body, tools) {
+  return '<div class="panel"><div class="ph"><div class="h">' + esc(title) + '</div>'
+    + (note ? '<div class="note">' + esc(note) + '</div>' : '')
+    + (tools ? '<div class="tools">' + tools + '</div>' : '')
+    + '</div><div class="pb">' + body + '</div></div>';
+}
+
+function card(k, v, s) {
+  return '<div class="card"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div>'
+    + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>';
+}
+
+function sevBadge(v) {
+  const s = String(v || '');
+  const cls = /严重|高/.test(s) ? 'b-high' : /中/.test(s) ? 'b-mid' : /低/.test(s) ? 'b-low' : 'b-none';
+  return s ? '<span class="badge ' + cls + '">' + esc(s) + '</span>' : '-';
+}
+
+function statusBadge(v) {
+  const s = String(v || '');
+  const cls = /ok|verified|done|active|通过|success/i.test(s) ? 'b-ok'
+    : /fail|error|partial|lock|missing/i.test(s) ? 'b-warn' : 'b-none';
+  return '<span class="badge ' + cls + '">' + esc(s || '-') + '</span>';
+}
+
+async function openReport(rel) {
+  const resp = await fetch('/api/report?file=' + encodeURIComponent(rel), {
+    headers: state.session ? { Authorization: 'Bearer ' + state.session } : {}
+  });
+  if (!resp.ok) { alert('报告打开失败：HTTP ' + resp.status); return; }
+  const text = await resp.text();
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(text); w.document.close(); }
+}
+
+async function renderOverview(c) {
+  const [ov, integ, scan] = await Promise.all([
+    api('/api/overview'), api('/api/integration/status'), api('/api/scan/overview')
+  ]);
+  const cnt = ov.counts || {};
+  const m = integ.modules || {};
+  const m1 = m.detection || {}, m2 = m.vuln || {}, m3 = m.scan || {},
+        m4 = m.auth || {}, m5 = m.harden || {};
+  let html = '<div class="cards">'
+    + card('近 24h 事件', num(cnt.events_24h), '累计 ' + num(cnt.events_total))
+    + card('近 24h 告警', num(cnt.alerts_24h), '未处理工单 ' + num(cnt.cases_open))
+    + card('漏洞问题', num(m3.findings), 'CVE 记录 ' + num(m3.cve_rows))
+    + card('扫描任务', num(m3.tasks), '快照 ' + num(m3.snapshots))
+    + card('认证审计链', num((m4.chain || {}).checked), (m4.chain || {}).ok ? '校验通过' : '校验异常')
+    + card('加固项', num(m5.items), '最近运行 ' + (m5.latest_run || '-'))
+    + '</div>';
+
+  const mods = [
+    ['检测 · 纵深防御', '事件 ' + num(m1.events) + ' / 告警 ' + num(m1.alerts) + ' / 工单 ' + num(m1.cases), 'm1'],
+    ['漏洞档案', '档案 ' + num(m2.records) + '（已验证 ' + num(m2.verified) + '） / 靶场 ' + num(m2.lab_envs), 'm2'],
+    ['定期扫描', '任务 ' + num(m3.tasks) + ' / 问题 ' + num(m3.findings), 'm3'],
+    ['身份认证', '用户 ' + num(m4.users) + ' / 有效会话 ' + num(m4.sessions), 'm4'],
+    ['安全加固', '基线 ' + num(m5.items) + ' 项 / 最近运行 ' + (m5.latest_run || '-'), 'm5']
+  ];
+  html += panel('功能域状态', '点击卡片进入对应功能域', '<div class="cards">' + mods.map((x) =>
+    '<div class="card" style="cursor:pointer" data-go="' + x[2] + '"><div class="k">' + esc(x[0]) + '</div>'
+    + '<div class="s" style="margin-top:6px;color:#4a5666">' + esc(x[1]) + '</div></div>').join('') + '</div>');
+
+  const alerts = await api('/api/alerts?since=24h&limit=6');
+  html += '<div class="two-col">'
+    + panel('最近告警', '/api/alerts', table(['时间', '规则', '级别', '技术', '主机'],
+        (alerts.items || []).map((a) => [ts(a.ts), esc((a.rule || {}).name || '-'),
+          sevBadge(a.level), esc(a.technique), esc((a.entity || {}).host_id)])))
+    + panel('最近扫描任务', '/api/scan/overview', table(['任务', '计划', '状态', '开始时间'],
+        ((scan.recent_tasks) || []).slice(0, 6).map((t) => [esc(t.task_id), esc(t.plan_id),
+          statusBadge(t.status), ts(t.started_at)])))
+    + '</div>';
+  c.innerHTML = html;
+  Array.prototype.forEach.call(c.querySelectorAll('[data-go]'), (el) => {
+    el.addEventListener('click', () => switchTab(el.dataset.go));
+  });
+}
+
+async function renderM1(c) {
+  const [ov, types, events, alerts, cases] = await Promise.all([
+    api('/api/overview'), api('/api/events/types'), api('/api/events/recent?limit=15'),
+    api('/api/alerts?since=24h&limit=12'), api('/api/cases?limit=10')
+  ]);
+  const cnt = ov.counts || {};
+  let html = '<div class="cards">'
+    + card('事件累计', num(cnt.events_total), '近 24h ' + num(cnt.events_24h))
+    + card('告警累计', num(cnt.alerts_total), '近 24h ' + num(cnt.alerts_24h))
+    + card('工单', num(cnt.cases_total), '未处理 ' + num(cnt.cases_open))
+    + card('IOC', num(cnt.iocs), 'DLQ ' + num(cnt.dlq))
+    + card('Sigma 规则', num((ov.sigma || {}).total) + ' / ' + num((ov.sigma || {}).supported), '')
+    + '</div>';
+  html += panel('事件类型 Top20', '/api/events/types', table(['类型', '数量'],
+    (types.items || []).map((t) => [esc(t.type), num(t.n)])));
+  html += panel('最近事件', '/api/events/recent', table(['时间', '类型', '来源', '产品', '主机'],
+    (events.items || []).map((e) => [ts(e.ts), esc(e.type), esc(e.source_layer), esc(e.engine), esc(e.host_id)])));
+  html += panel('最近告警', '/api/alerts?since=24h', table(['时间', '规则', '级别', '技术', '主机'],
+    (alerts.items || []).map((a) => [ts(a.ts), esc((a.rule || {}).name), sevBadge(a.level), esc(a.technique), esc((a.entity || {}).host_id)])));
+  html += panel('最近工单', '/api/cases', table(['工单号', '标题', '级别', '状态', '创建时间'],
+    (cases.items || []).map((x) => [esc(x.case_id), esc(x.title), sevBadge(x.severity), statusBadge(x.status), ts(x.created_at)])));
+  c.innerHTML = html;
+}
+
+async function renderM2(c) {
+  const [vuln, lab] = await Promise.all([api('/api/vuln/records?limit=50'), api('/api/lab/envs?limit=20')]);
+  const envs = lab.envs || [];
+  const runs = lab.runs || [];
+  let html = '<div class="cards">'
+    + card('漏洞档案', num((vuln.records || []).length), '已验证 ' + num((vuln.records || []).filter((v) => v.status === 'verified').length))
+    + card('靶场环境', num(envs.length), 'Vulhub 索引')
+    + card('靶场运行', num(runs.length), 'up/down 记录')
+    + '</div>';
+  html += panel('漏洞档案', '/api/vuln/records', table(['编号', 'CVE', '组件', 'CWE', 'CVSS', '等级', '状态'],
+    (vuln.records || []).map((v) => [esc(v.id), esc(v.cve), esc(v.component), esc(v.cwe),
+      num(v.cvss_score), sevBadge(v.severity), statusBadge(v.status)])));
+  html += panel('靶场环境', '/api/lab/envs', table(['环境', '状态', '端口', '运行容器'],
+    envs.map((e) => [esc(e.env_id), statusBadge(e.state), esc(e.ports_json || e.host_ports || '{}'), num(e.running)])));
+  html += panel('靶场运行记录', '/api/lab/envs', table(['run', '环境', '动作', '结果', '耗时(ms)', '开始时间'],
+    runs.map((r) => [esc(r.run_id), esc(r.env_id), esc(r.action), statusBadge(r.result), num(r.elapsed_ms), ts(r.started_at)])));
+  c.innerHTML = html;
+}
+
+async function renderM3(c) {
+  const [scan, plans, tasks, reports] = await Promise.all([
+    api('/api/scan/overview'), api('/api/scan/plans'), api('/api/scan/tasks?limit=15'),
+    api('/api/scan/reports')
+  ]);
+  const cnt = scan.counts || {};
+  let html = '<div class="cards">'
+    + card('资产', num(cnt.asset), '计划 ' + num(cnt.plan))
+    + card('任务', num(cnt.task), '快照 ' + num(cnt.snapshot))
+    + card('问题', num(cnt.finding), 'CVE ' + num(cnt.cve))
+    + card('问题构成', num(Object.keys((scan.findings || {}).by_kind || {}).length) + ' 类', '按 kind 分类')
+    + '</div>';
+  html += '<div style="margin-bottom:10px">'
+    + '<label class="muted" style="margin-right:6px">严重级</label>'
+    + '<select id="m3Sev" style="padding:5px 8px;border:1px solid #c3ccd8;border-radius:4px">'
+    + '<option value="">全部</option><option>严重</option><option>高</option><option>中</option><option>低</option></select>'
+    + ' <button class="btn small" id="m3Load">筛选问题</button></div>';
+  html += panel('扫描计划', '/api/scan/plans', table(['计划', '类型', 'Profile', '端口', '引擎', '上次运行'],
+    (plans.items || []).map((p) => [esc(p.plan_id), esc(p.kind), esc(p.profile), esc(p.ports),
+      esc((p.engines || []).join(',')), ts(p.last_run)])));
+  html += panel('最近任务', '/api/scan/tasks', table(['任务', '计划', '资产', '状态', '耗时(ms)', '开始时间'],
+    (tasks.items || []).map((t) => [esc(t.task_id), esc(t.plan_id), esc(t.asset_id),
+      statusBadge(t.status), num(t.cost_ms), ts(t.started_at)])));
+  html += panel('漏洞问题（最新 50）', '/api/scan/findings', '<div id="m3Findings">加载中…</div>');
+  html += panel('扫描报告（HTML）', '/api/scan/reports', table(['报告', '大小', '时间', '操作'],
+    (reports.items || []).map((r) => [esc(r.name), num(r.size), esc(r.mtime),
+      '<button class="btn ghost small" data-report="' + esc(r.rel) + '">查看</button>'])));
+  c.innerHTML = html;
+
+  async function loadFindings() {
+    const sev = $('m3Sev').value;
+    const q = '/api/scan/findings?limit=50' + (sev ? '&severity=' + encodeURIComponent(sev) : '');
+    const data = await api(q);
+    $('m3Findings').innerHTML = table(['问题', '检查项', '资产', '类型', '等级', 'CVSS', '置信度', '状态'],
+      (data.items || []).map((f) => [esc(f.finding_id), esc(f.check_id), esc(f.asset_id), esc(f.kind),
+        sevBadge(f.severity), num(f.cvss), esc(f.confidence), statusBadge(f.status)]));
+  }
+  $('m3Load').addEventListener('click', () => loadFindings().catch((e) => { $('m3Findings').textContent = e.message; }));
+  Array.prototype.forEach.call(c.querySelectorAll('[data-report]'), (el) => {
+    el.addEventListener('click', () => openReport(el.dataset.report));
+  });
+  await loadFindings();
+}
+
+async function renderM4(c) {
+  const [users, sessions, policy, audit] = await Promise.all([
+    api('/api/auth/users'), api('/api/auth/sessions'), api('/api/auth/policy'), api('/api/auth/audit?limit=15')
+  ]);
+  const chain = audit.chain || {};
+  let html = '<div class="cards">'
+    + card('用户', num((users.items || []).length), '账号总数')
+    + card('有效会话', num((sessions.items || []).filter((s) => !s.revoked).length), '最近 50 条')
+    + card('认证审计链', num(chain.checked), chain.ok ? '校验通过' : '校验失败')
+    + card('失败阈值', (policy.policy && policy.policy.lockout && policy.policy.lockout.account_fail) || '-', '次')
+    + '</div>';
+  html += panel('用户', '/api/auth/users', table(['ID', '用户名', '口令算法', '状态', 'TOTP', '失败次数', '最近登录'],
+    (users.items || []).map((u) => [num(u.id), esc(u.username), esc(u.algo || u.password_algo),
+      statusBadge(u.status), statusBadge(u.totp_active ? 'active' : 'none'),
+      num(u.failed_count), ts(u.last_login_ts)])));
+  html += panel('会话', '/api/auth/sessions', table(['会话', '用户', 'LOA', 'IP', '创建', '空闲到期', '状态'],
+    (sessions.items || []).map((s) => [esc(String(s.session_id).slice(0, 12)) + '…', num(s.user_id), num(s.loa),
+      esc(s.ip), ts(s.created_ts), ts(s.idle_expires_ts), s.revoked ? statusBadge('revoked') : statusBadge('active')])));
+  html += panel('认证策略', '/api/auth/policy', '<div class="kv">' + Object.keys(policy.policy || {}).map((k) =>
+    '<div class="k">' + esc(k) + '</div><div class="mono">' + esc(JSON.stringify(policy.policy[k])) + '</div>').join('') + '</div>');
+  html += panel('认证审计（最近 15 条）', '/api/auth/audit',
+    table(['时间', '用户', '事件', '因子', '结果', 'LOA', '风险', '详情'],
+      (audit.items || []).map((a) => [ts(a.ts), esc(a.username), esc(a.event), esc(a.factor),
+        statusBadge(a.result), num(a.loa), num(a.risk_score), esc(a.detail)])));
+  c.innerHTML = html;
+}
+
+async function renderM5(c) {
+  const st = await api('/api/harden/status');
+  const items = st.items || [];
+  const plat = items.filter((i) => String(i.id).indexOf('H-PL-') === 0);
+  let html = '<div class="cards">'
+    + card('基线项', num(items.length), 'A 机适用 ' + num(items.filter((i) => i.scope_A).length))
+    + card('平台登录项', num(plat.length), 'H-PL-01～04')
+    + card('计划', num((st.plans || []).length), '最近 5 个')
+    + card('运行记录', num((st.runs || []).length), '最近 6 次')
+    + '</div>';
+  html += panel('基线项', '/api/harden/status', table(['ID', '类别', '标题', '风险', 'A 机适用'],
+    items.map((i) => [esc(i.id), esc(i.category), esc(i.title), sevBadge(i.risk),
+      statusBadge(i.scope_A ? 'yes' : 'no')])));
+  html += panel('加固计划', '/api/harden/status', table(['计划', '角色', '资产', '项数', '创建时间'],
+    (st.plans || []).map((p) => [esc(p.plan_id), esc(p.role), esc(p.asset), num(p.items), ts(p.created_at)])));
+  html += panel('运行结果', '/api/harden/status', table(['运行', '计划', '模式', '状态', '项数', '统计', '开始时间'],
+    (st.runs || []).map((r) => [esc(r.run_id), esc(r.plan_id), esc(r.mode), statusBadge(r.status),
+      num(r.items), esc(JSON.stringify(r.counts)), ts(r.started_at)])));
+  html += panel('加固报告', '/api/harden/status', (st.reports || []).length
+    ? table(['报告', '大小', '操作'], (st.reports || []).map((r) => [esc(r.name), num(r.size),
+        '<button class="btn ghost small" data-hreport="reports/' + esc(r.name) + '">查看</button>']))
+    : '<div class="empty">暂无报告</div>');
+  c.innerHTML = html;
+  Array.prototype.forEach.call(c.querySelectorAll('[data-hreport]'), (el) => {
+    el.addEventListener('click', () => openReport(el.dataset.hreport));
+  });
+}
+
+async function renderSecurity(c) {
+  const sec = await api('/api/platform/security');
+  const https = sec.https || {}, lock = sec.lockout || {}, svc = sec.service || {}, bind = sec.bind || {};
+  const paths = sec.paths || {};
+  let html = '<div class="cards">'
+    + card('HTTPS 入口', https.ok ? esc(https.protocol || 'TLS') : '未启用', https.ok ? esc(https.cipher || '') : '')
+    + card('登录锁定', (lock.account_fail || '-') + ' 次', '锁定 ' + (lock.lock_seconds || '-') + ' s')
+    + card('服务身份', esc(svc.user || '-'), esc((svc.sandbox || []).join(' / ')))
+    + card('监听', esc(bind.host || '-') + ':' + esc(bind.port || '-'), bind.tls_ingress ? '经 HTTPS 反代' : '仅回环')
+    + '</div>';
+  const rows = [
+    ['HTTPS 反代（nginx 8443）', https.ok ? (https.protocol + ' / ' + https.cipher) : ('未启用：' + (https.error || '')), https.ok ? '仅 TLS1.2/1.3' : '待加固'],
+    ['登录锁定策略', '失败 ' + (lock.account_fail || '-') + ' 次 / 锁定 ' + (lock.lock_seconds || '-') + ' s', 'H-PL-02 基线固化'],
+    ['服务运行身份', (svc.user || '-') + ' / ' + ((svc.sandbox || []).join(' / ') || '-'), svc.user !== 'root' ? '非 root 运行' : '需检查'],
+    ['平台监听', (bind.host || '-') + ':' + (bind.port || '-'), bind.tls_ingress ? '经 HTTPS 反代对外' : '仅回环直达']
+  ];
+  html += panel('平台登录面加固', '/api/platform/security', table(['项目', '实测值', '结论'], rows));
+  const prow = Object.keys(paths).map((p) => [esc(p), paths[p].exists ? esc(paths[p].mode) : '不存在',
+    paths[p].exists ? statusBadge('ok') : statusBadge('missing')]);
+  html += panel('关键路径权限', '/api/platform/security', table(['路径', '权限', '状态'], prow));
+  c.innerHTML = html;
+}
+
+(async function boot() {
+  if (!state.session) { showLogin(''); return; }
+  try {
+    state.who = await api('/api/auth/session');
+    showApp();
+  } catch (e) {
+    showLogin('会话已失效，请重新登录');
+  }
+})();
+</script>
+</body>
+</html>
+
+
+

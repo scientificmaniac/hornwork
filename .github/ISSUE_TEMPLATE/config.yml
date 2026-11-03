@@ -1,0 +1,9 @@
+# Issue 模板配置
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私密报告）
+    url: https://github.com/scientificmaniac/hornwork/security/advisories/new
+    about: 请勿公开提交安全漏洞；报告流程见 SECURITY.md
+  - name: 使用问答与讨论
+    url: https://github.com/scientificmaniac/hornwork/discussions
+    about: 安装、配置、规则编写等使用问题

@@ -1,0 +1,18 @@
+{
+  "id": "H-0002",
+  "name": "敏感凭据文件访问（shadow/gshadow）",
+  "level": 10,
+  "mitre": ["T1003.008"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["process_create", "file_create", "file_modify"],
+  "condition": {
+    "any": [
+      {"field": "file.path", "op": "in", "value": ["/etc/shadow", "/etc/gshadow"]},
+      {"field": "process.cmdline", "op": "contains", "value": "/etc/shadow"},
+      {"field": "process.cmdline", "op": "contains", "value": "/etc/gshadow"},
+      {"field": "process.image", "op": "in", "value": ["/usr/bin/unshadow", "/usr/sbin/unshadow"]}
+    ]
+  },
+  "description": "影子文件被命令行读取/复制，或影子文件本身被改写（TC-06 复制 /etc/shadow）。"
+}

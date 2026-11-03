@@ -1,0 +1,4 @@
+{"type": "hash", "value": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f", "confidence": 100, "source": "hornwork-demo-seed", "tlp": "white", "name": "eicar-standard-test-file"}
+{"type": "hash", "value": "89994f00c494958f24d264d9c335412e57916113b13c1777adb5737612bc4264", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white", "name": "hornwork-demo-marker"}
+{"type": "hash", "value": "15197173bce54ca220d9c3c5ebe18672bcc1b5e1e857529f299bd5b40e1c8b0a", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white", "name": "hornwork-demo-dropper-script"}
+{"type": "hash", "value": "589f34cc72b2e5693fe18c10abbd828989dd5c072af38a8818d786ce3c0c8080", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white", "name": "hornwork-demo-c2-beacon"}

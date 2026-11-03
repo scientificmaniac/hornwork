@@ -1,0 +1,17 @@
+{
+  "id": "H-0004",
+  "name": "LD_PRELOAD / ld.so.preload 劫持",
+  "level": 10,
+  "mitre": ["T1574.006"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["process_create", "file_create", "file_modify"],
+  "condition": {
+    "any": [
+      {"field": "file.path", "op": "eq", "value": "/etc/ld.so.preload"},
+      {"field": "process.cmdline", "op": "contains", "value": "LD_PRELOAD="},
+      {"field": "process.cmdline", "op": "contains", "value": "/etc/ld.so.preload"}
+    ]
+  },
+  "description": "动态链接器预加载被写入或通过命令行注入（TC-10）。"
+}

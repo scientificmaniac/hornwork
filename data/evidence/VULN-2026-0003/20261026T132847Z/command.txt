@@ -1,0 +1,7 @@
+python3 - <<'PY'
+# 向 127.0.0.1:<LAB_PORT> 发送 RESP EVAL（package.loadlib 载入 luaopen_io 执行 id）
+PY
+
+### 观测
+ping=b'+PONG\r\n'
+eval_uid=True

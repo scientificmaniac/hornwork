@@ -1,0 +1,34 @@
+[project]
+name = "hornwork"
+version = "0.1.0"
+description = "Hornwork: a single-process Linux defense-in-depth platform (detection, response, vulnerability scanning, authentication, hardening)"
+requires-python = ">=3.11"
+dependencies = [
+  "yara-python==4.5.4",
+  "PyYAML==6.0.3",
+]
+
+[project.optional-dependencies]
+# 认证子系统（Argon2id / TOTP / AES-GCM 原语）与加固模块的部分密码学用例需要
+auth = [
+  "argon2-cffi>=23.1.0",
+  "cryptography>=42.0",
+]
+dev = [
+  "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/scientificmaniac/hornwork"
+Documentation = "https://github.com/scientificmaniac/hornwork/tree/main/docs"
+Issues = "https://github.com/scientificmaniac/hornwork/issues"
+
+[project.scripts]
+hornworkctl = "hornwork.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hornwork*"]

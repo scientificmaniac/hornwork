@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hornwork 安全运营控制台</title>
+<style>
+  /* 深色技术风：无外部依赖，单文件内联样式 */
+  :root {
+    --bg: #0a0e13;
+    --panel: #101722;
+    --panel-2: #141d2b;
+    --border: #1e2a3a;
+    --border-strong: #2b3d52;
+    --text: #c9d6e3;
+    --muted: #7b8da3;
+    --accent: #3ddc97;
+    --accent-2: #4da3ff;
+    --warn: #ffb454;
+    --danger: #ff5f6d;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body { font: 14px/1.55 var(--mono); -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent-2); text-decoration: none; }
+  header.topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 20px; background: linear-gradient(180deg, #0d141d, #0a0e13);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; letter-spacing: 2px; font-weight: 700; }
+  .brand .logo { color: var(--accent); font-size: 20px; }
+  .brand small { color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .controls label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  input, select, textarea, button {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--border-strong); border-radius: 4px; padding: 5px 8px; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent-2); }
+  button { cursor: pointer; background: #182435; transition: border-color .15s, color .15s; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  .pill {
+    padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-strong);
+    font-size: 12px; color: var(--muted);
+  }
+  .pill.ok { color: var(--accent); border-color: rgba(61, 220, 151, .45); }
+  .pill.bad { color: var(--danger); border-color: rgba(255, 95, 109, .45); }
+  nav#tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  nav#tabs button {
+    border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent;
+    padding: 10px 14px; color: var(--muted); white-space: nowrap; letter-spacing: 1px;
+  }
+  nav#tabs button.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(61, 220, 151, .05); }
+  main { padding: 16px 20px 60px; max-width: 1500px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fade .18s ease-in; }
+  @keyframes fade { from { opacity: .35; } to { opacity: 1; } }
+  h2.panel-title { font-size: 15px; letter-spacing: 1px; margin: 4px 0 14px; color: var(--text); }
+  h2.panel-title .sub { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .card .k { color: var(--muted); font-size: 12px; letter-spacing: .5px; }
+  .card .v { font-size: 22px; font-weight: 700; margin-top: 4px; color: var(--text); }
+  .card .v.accent { color: var(--accent); }
+  .card .v.warn { color: var(--warn); }
+  .card .v.danger { color: var(--danger); }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 8px 10px; background: var(--panel-2); color: var(--muted);
+    font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0;
+  }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #151f2c; vertical-align: top; word-break: break-all; }
+  tbody tr:hover { background: rgba(77, 163, 255, .05); }
+  tbody tr:last-child td { border-bottom: none; }
+  .empty { padding: 22px; text-align: center; color: var(--muted); }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 12px; border: 1px solid var(--border-strong); color: var(--muted); }
+  .tag.tp { color: var(--accent); border-color: rgba(61, 220, 151, .45); }
+  .tag.tn { color: var(--accent-2); border-color: rgba(77, 163, 255, .45); }
+  .tag.fp, .tag.fn { color: var(--danger); border-color: rgba(255, 95, 109, .45); }
+  .tag.inc { color: var(--warn); border-color: rgba(255, 180, 84, .45); }
+  .lvl { font-weight: 700; }
+  .lvl.hi { color: var(--danger); }
+  .lvl.mid { color: var(--warn); }
+  .lvl.lo { color: var(--accent-2); }
+  .bars { display: grid; gap: 8px; margin: 6px 0 18px; }
+  .bar-row { display: grid; grid-template-columns: 120px 1fr 90px; align-items: center; gap: 10px; font-size: 12px; }
+  .bar-track { height: 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, rgba(61, 220, 151, .85), rgba(77, 163, 255, .85)); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 980px) { .split { grid-template-columns: 1fr; } }
+  .box { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .box h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); letter-spacing: 1px; font-weight: 600; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 10px; font-size: 13px; }
+  .kv .k { color: var(--muted); }
+  .mono-sm { font-size: 12px; color: var(--muted); }
+  .toast {
+    position: fixed; right: 18px; bottom: 18px; max-width: 420px; padding: 10px 14px; border-radius: 6px;
+    background: #1a1014; border: 1px solid rgba(255, 95, 109, .5); color: #ffd7da; font-size: 13px;
+    opacity: 0; transform: translateY(8px); transition: all .2s; pointer-events: none; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  footer { padding: 14px 20px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); text-align: center; }
+  .hint { color: var(--muted); font-size: 12px; }
+  textarea { width: 100%; min-height: 110px; resize: vertical; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">◈</span> HORNWORK <small>安全运营控制台</small></div>
+  <div class="controls">
+    <label>Token <input id="token" type="password" size="18" placeholder="Bearer token（可留空）"></label>
+    <button id="btn-save-token">保存</button>
+    <label><input id="autorefresh" type="checkbox" checked> 自动刷新 10s</label>
+    <span id="conn" class="pill">未连接</span>
+  </div>
+</header>
+
+<nav id="tabs"></nav>
+
+<main>
+  <section class="panel active" id="panel-overview">
+    <h2 class="panel-title">总览 <span class="sub">事件/告警/工单/情报实时计数</span></h2>
+    <div class="cards" id="view-overview-cards"></div>
+    <div class="split">
+      <div class="box"><h3>最近一次验证</h3><div id="view-overview-validation"></div></div>
+      <div class="box"><h3>最近扫描</h3><div id="view-overview-scans"></div></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-events">
+    <h2 class="panel-title">事件流 <span class="sub">canonical event</span></h2>
+    <div class="toolbar">
+      <label>类型 <select id="ev-type">
+        <option value="">全部</option><option>process_create</option><option>file_create</option>
+        <option>file_modify</option><option>file_delete</option><option>net_connect</option>
+        <option>dns_query</option><option>logon</option><option>logon_fail</option>
+        <option>account_create</option><option>persist_item</option><option>scan_result</option>
+      </select></label>
+      <label>来源层 <select id="ev-layer">
+        <option value="">全部</option><option>host</option><option>net</option><option>memory</option><option>static</option>
+      </select></label>
+      <label>since <input id="ev-since" size="6" value="1h"></label>
+      <label>limit <input id="ev-limit" size="4" value="100"></label>
+      <button id="ev-load">查询</button>
+    </div>
+    <div class="table-wrap" id="view-events"></div>
+  </section>
+
+  <section class="panel" id="panel-alerts">
+    <h2 class="panel-title">告警 <span class="sub">detection alert</span></h2>
+    <div class="toolbar">
+      <label>最低级别 <input id="al-level" size="3" value="0"></label>
+      <label>技术 <input id="al-tech" size="10" placeholder="T1046"></label>
+      <label>since <input id="al-since" size="6" value="24h"></label>
+      <label>limit <input id="al-limit" size="4" value="100"></label>
+      <button id="al-load">查询</button>
+    </div>
+    <div class="table-wrap" id="view-alerts"></div>
+  </section>
+
+  <section class="panel" id="panel-rules">
+    <h2 class="panel-title">规则 <span class="sub">YARA / 网络 / 主机 / Sigma</span></h2>
+    <div class="toolbar">
+      <button id="rules-reload" class="primary">请求热加载</button>
+      <span class="hint" id="rules-reload-hint"></span>
+    </div>
+    <div class="cards" id="view-rules-stats"></div>
+    <div class="table-wrap" id="view-rules"></div>
+  </section>
+
+  <section class="panel" id="panel-intel">
+    <h2 class="panel-title">情报 <span class="sub">IOC 列表与导入</span></h2>
+    <div class="toolbar">
+      <label>类型 <select id="intel-kind">
+        <option value="">全部</option><option>ip</option><option>domain</option>
+        <option>url</option><option>hash</option><option>filename</option>
+      </select></label>
+      <label>limit <input id="intel-limit" size="4" value="500"></label>
+      <button id="intel-load">查询</button>
+    </div>
+    <div class="cards" id="view-intel-stats"></div>
+    <div class="table-wrap" id="view-intel"></div>
+    <div class="box" style="margin-top:14px">
+      <h3>导入 IOC（JSON 记录数组）</h3>
+      <textarea id="intel-body" placeholder='[{"type":"domain","value":"c2.example.com","confidence":80,"source":"demo"}]'></textarea>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="intel-import" class="primary">导入</button>
+        <span class="hint" id="intel-import-hint"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-cases">
+    <h2 class="panel-title">工单 <span class="sub">case 状态机</span></h2>
+    <div class="toolbar">
+      <label>状态 <select id="case-status">
+        <option value="">全部</option><option>open</option><option>investigating</option>
+        <option>contained</option><option>closed</option>
+      </select></label>
+      <button id="case-load">查询</button>
+      <label>标题 <input id="case-title" size="24" placeholder="新建工单标题"></label>
+      <label>级别 <select id="case-severity"><option>P1</option><option>P2</option><option selected>P3</option><option>P4</option></select></label>
+      <button id="case-create" class="primary">新建工单</button>
+    </div>
+    <div class="table-wrap" id="view-cases"></div>
+  </section>
+
+  <section class="panel" id="panel-validation">
+    <h2 class="panel-title">验证 <span class="sub">TP/TN/FP/FN · TPR/FPR · MTTD · 覆盖率</span></h2>
+    <div class="cards" id="view-validation-metrics"></div>
+    <div class="box" style="margin-bottom:14px"><h3>最近一次运行</h3><div id="view-validation-meta" class="kv"></div></div>
+    <div class="table-wrap" id="view-validation"></div>
+  </section>
+
+  <section class="panel" id="panel-engines">
+    <h2 class="panel-title">引擎贡献 <span class="sub">多引擎级联贡献与耗时</span></h2>
+    <div class="split">
+      <div class="box"><h3>恶意判定来源（近 7 天）</h3><div class="bars" id="view-engines-bars"></div></div>
+      <div class="box"><h3>Sigma 支持统计</h3><div id="view-engines-sigma" class="kv"></div></div>
+    </div>
+    <div class="table-wrap" id="view-engines-table" style="margin-top:14px"></div>
+    <div class="box" style="margin-top:14px"><h3>最近扫描结果</h3><div id="view-engines-scans"></div></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<footer>Hornwork · 安全运营控制台 · 只读为主，写操作走 Bearer token 鉴权</footer>
+
+<script>
+'use strict';
+/* ----------------------------- 基础状态与工具 ----------------------------- */
+const TABS = [
+  { key: 'overview', label: '总览' },
+  { key: 'events', label: '事件流' },
+  { key: 'alerts', label: '告警' },
+  { key: 'rules', label: '规则' },
+  { key: 'intel', label: '情报' },
+  { key: 'cases', label: '工单' },
+  { key: 'validation', label: '验证' },
+  { key: 'engines', label: '引擎贡献' },
+];
+const state = { token: localStorage.getItem('hornwork_token') || '', tab: 'overview', timer: null, busy: false };
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (value) => String(value === undefined || value === null ? '' : value)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const fmtTs = (ts) => (ts ? String(ts).replace('T', ' ').replace('Z', '') : '-');
+const num = (v) => (v === undefined || v === null || v === '' ? '-' : v);
+
+function toast(message, bad) {
+  const box = $('#toast');
+  box.textContent = message;
+  box.style.borderColor = bad ? 'rgba(255,95,109,.5)' : 'rgba(61,220,151,.5)';
+  box.style.color = bad ? '#ffd7da' : '#c8ffe6';
+  box.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => box.classList.remove('show'), 3600);
+}
+
+function setConn(text, cls) {
+  const pill = $('#conn');
+  pill.textContent = text;
+  pill.className = 'pill' + (cls ? ' ' + cls : '');
+}
+
+/* 统一请求：自动带 Bearer token，错误统一解析 C7 结构 */
+async function api(path, options) {
+  const opts = Object.assign({ method: 'GET', headers: {} }, options || {});
+  if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
+  if (opts.body && !opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
+  let resp;
+  try {
+    resp = await fetch(path, opts);
+  } catch (err) {
+    setConn('连接失败', 'bad');
+    toast('请求失败：' + err, true);
+    return { ok: false, status: 0, data: null };
+  }
+  const text = await resp.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (err) { data = { message: text.slice(0, 300) }; }
+  if (resp.status === 401) {
+    setConn('未授权', 'bad');
+    toast('未授权：请填写正确的 Bearer token', true);
+    return { ok: false, status: 401, data };
+  }
+  if (!resp.ok) {
+    const msg = (data && (data.message || data.detail)) || ('HTTP ' + resp.status);
+    toast('接口错误：' + msg, true);
+    return { ok: false, status: resp.status, data };
+  }
+  setConn('已连接', 'ok');
+  return { ok: true, status: resp.status, data };
+}
+
+/* 简单表格渲染：headers 为表头数组，rows 为二维 HTML 单元格数组 */
+function renderTable(container, headers, rows, emptyText) {
+  if (!rows || !rows.length) {
+    container.innerHTML = '<div class="empty">' + esc(emptyText || '暂无数据') + '</div>';
+    return;
+  }
+  const head = '<thead><tr>' + headers.map((h) => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>';
+  const body = '<tbody>' + rows.map((cols) => '<tr>' + cols.map((c) => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody>';
+  container.innerHTML = '<table>' + head + body + '</table>';
+}
+
+function verdictTag(verdict) {
+  const cls = { TP: 'tp', TN: 'tn', FP: 'fp', FN: 'fn', inconclusive: 'inc' }[verdict] || '';
+  return '<span class="tag ' + cls + '">' + esc(verdict) + '</span>';
+}
+function levelTag(level) {
+  const value = Number(level || 0);
+  const cls = value >= 12 ? 'hi' : (value >= 8 ? 'mid' : 'lo');
+  return '<span class="lvl ' + cls + '">' + esc(value) + '</span>';
+}
+function pct(value) {
+  if (value === null || value === undefined) return 'N/A';
+  return (Number(value) * 100).toFixed(1) + '%';
+}
+
+/* ----------------------------- 各面板渲染 ----------------------------- */
+function renderOverview(data) {
+  const counts = data.counts || {};
+  const cards = [
+    ['事件总数', counts.events_total, ''],
+    ['24h 事件', counts.events_24h, 'accent'],
+    ['告警总数', counts.alerts_total, ''],
+    ['24h 告警', counts.alerts_24h, 'warn'],
+    ['未关闭告警', counts.alerts_open, 'danger'],
+    ['工单', counts.cases_total, ''],
+    ['扫描结果', counts.scans_total, ''],
+    ['IOC', counts.iocs, 'accent'],
+    ['内存命中', counts.mem_hits, ''],
+    ['死信', counts.dlq, 'warn'],
+  ];
+  $('#view-overview-cards').innerHTML = cards.map(([label, value, cls]) =>
+    '<div class="card"><div class="k">' + esc(label) + '</div><div class="v ' + cls + '">' + num(value) + '</div></div>'
+  ).join('');
+
+  const validation = data.validation;
+  if (!validation) {
+    $('#view-overview-validation').innerHTML = '<div class="empty">尚未运行验证套件</div>';
+  } else {
+    const m = validation.metrics || {};
+    $('#view-overview-validation').innerHTML =
+      '<div class="kv">' +
+      '<span class="k">run_id</span><span>' + esc(validation.run_id) + '</span>' +
+      '<span class="k">用例数</span><span>' + num(validation.case_count) + '</span>' +
+      '<span class="k">TP / FN</span><span>' + num(m.TP) + ' / ' + num(m.FN) + '</span>' +
+      '<span class="k">FP / TN</span><span>' + num(m.FP) + ' / ' + num(m.TN) + '</span>' +
+      '<span class="k">TPR / FPR</span><span>' + pct(m.tpr) + ' / ' + pct(m.fpr) + '</span>' +
+      '<span class="k">MTTD</span><span>' + (m.mttd_sec === null || m.mttd_sec === undefined ? 'N/A' : Number(m.mttd_sec).toFixed(2) + ' s') + '</span>' +
+      '<span class="k">覆盖率</span><span>' + pct(m.coverage) + '</span>' +
+      '</div>';
+  }
+  const scans = data.recent_scans || [];
+  $('#view-overview-scans').innerHTML = scans.length
+    ? scans.map((s) => '<div class="mono-sm">' + esc(fmtTs(s.ts)) + ' · ' + esc(s.verdict) +
+        ' <span class="tag">' + esc(s.first_hit || '-') + '</span> ' + esc((s.path || '').slice(0, 90)) + '</div>').join('')
+    : '<div class="empty">暂无扫描结果</div>';
+}
+
+async function loadEvents() {
+  const params = new URLSearchParams({
+    since: $('#ev-since').value.trim() || '1h',
+    limit: $('#ev-limit').value.trim() || '100',
+  });
+  if ($('#ev-type').value) params.set('type', $('#ev-type').value);
+  if ($('#ev-layer').value) params.set('layer', $('#ev-layer').value);
+  const res = await api('/api/events?' + params.toString());
+  if (!res.ok) return;
+  const items = res.data.items || [];
+  renderTable($('#view-events'), ['时间', '类型', '来源层', '来源组件', '主机'], items.map((ev) => [
+    esc(fmtTs(ev.ts)), '<span class="tag">' + esc(ev.event_type) + '</span>',
+    esc(ev.source_layer), esc(ev.source_product), esc((ev.host || {}).host_id),
+  ]), '窗口内没有事件');
+}
+
+async function loadAlerts() {
+  const params = new URLSearchParams({
+    since: $('#al-since').value.trim() || '24h',
+    limit: $('#al-limit').value.trim() || '100',
+  });
+  const level = parseInt($('#al-level').value, 10);
+  if (!Number.isNaN(level)) params.set('level_min', String(level));
+  const tech = $('#al-tech').value.trim();
+  if (tech) params.set('technique', tech);
+  const res = await api('/api/alerts?' + params.toString());
+  if (!res.ok) return;
+  const items = res.data.items || [];
+  renderTable($('#view-alerts'), ['时间', '规则', '级别', '技术', '引擎', '状态'], items.map((al) => {
+    const rule = al.rule || {};
+    return [
+      esc(fmtTs(al.ts)), esc(rule.id || al.rule_id || '-') + '<br><span class="mono-sm">' + esc(rule.name || '') + '</span>',
+      levelTag(al.level), esc(al.technique || '-'), esc(rule.engine || '-'),
+      '<span class="tag">' + esc(al.status || (al._row || {}).status || '-') + '</span>',
+    ];
+  }), '窗口内没有告警');
+}
+
+async function loadRules() {
+  const res = await api('/api/rules');
+  if (!res.ok) return;
+  const data = res.data;
+  const sigma = data.sigma || {};
+  $('#view-rules-stats').innerHTML = [
+    ['规则文件', data.count, 'accent'], ['Sigma 规则', sigma.total, ''], ['已支持', sigma.supported, 'accent'], ['Sigma 命中', sigma.hits, 'warn'],
+  ].map(([k, v, cls]) => '<div class="card"><div class="k">' + esc(k) + '</div><div class="v ' + cls + '">' + num(v) + '</div></div>').join('');
+  const reload = data.reload || {};
+  $('#rules-reload-hint').textContent = reload.requested_at
+    ? ('上次热加载请求：' + reload.requested_at + '（第 ' + reload.count + ' 次）')
+    : '尚未请求过热加载';
+  const items = data.items || [];
+  renderTable($('#view-rules'), ['来源', 'ID', '名称', '级别', '规则数', '更新时间', '路径'], items.map((item) => [
+    '<span class="tag">' + esc(item.source) + '</span>', esc(item.id), esc(item.name || '-'),
+    esc(num(item.level)), esc(num(item.rule_count)), esc(fmtTs(item.mtime)),
+    '<span class="mono-sm">' + esc(item.path) + '</span>',
+  ]), '规则目录为空或尚未配置');
+}
+
+async function loadIntel() {
+  const params = new URLSearchParams({ limit: $('#intel-limit').value.trim() || '500' });
+  if ($('#intel-kind').value) params.set('kind', $('#intel-kind').value);
+  const res = await api('/api/intel?' + params.toString());
+  if (!res.ok) return;
+  const data = res.data;
+  const byType = data.by_type || {};
+  $('#view-intel-stats').innerHTML = Object.keys(byType).map((kind) =>
+    '<div class="card"><div class="k">' + esc(kind) + '</div><div class="v">' + num(byType[kind]) + '</div></div>'
+  ).join('') || '<div class="card"><div class="k">IOC 总数</div><div class="v">0</div></div>';
+  const items = data.items || [];
+  renderTable($('#view-intel'), ['类型', '值', '置信度', '状态', '来源', '最近出现'], items.map((ioc) => [
+    '<span class="tag">' + esc(ioc.type) + '</span>', esc(ioc.value), esc(num(ioc.confidence)),
+    '<span class="tag">' + esc(ioc.status) + '</span>', esc(ioc.source || '-'), esc(fmtTs(ioc.last_seen)),
+  ]), '暂无 IOC');
+}
+
+async function loadCases() {
+  const params = new URLSearchParams({ limit: '200' });
+  if ($('#case-status').value) params.set('status', $('#case-status').value);
+  const res = await api('/api/cases?' + params.toString());
+  if (!res.ok) return;
+  const items = res.data.items || [];
+  renderTable($('#view-cases'), ['case_id', '标题', '级别', '状态', '判定', '创建时间', '关闭时间'], items.map((c) => [
+    esc(c.case_id), esc(c.title || '-'), esc(c.severity || '-'),
+    '<span class="tag">' + esc(c.status || '-') + '</span>', esc(c.verdict || '-'),
+    esc(fmtTs(c.created_at)), esc(fmtTs(c.closed_at)),
+  ]), '暂无工单');
+}
+
+async function loadValidation() {
+  const res = await api('/api/validate');
+  if (!res.ok) return;
+  const data = res.data;
+  const m = data.metrics;
+  if (!data.run_id || !m) {
+    $('#view-validation-metrics').innerHTML = '<div class="card"><div class="k">验证</div><div class="v">未运行</div></div>';
+    $('#view-validation-meta').innerHTML = '<span class="k">提示</span><span>请先执行 hornworkctl verify run 或 VerifyRunner.run()</span>';
+    $('#view-validation').innerHTML = '<div class="empty">暂无验证结果</div>';
+    return;
+  }
+  const cards = [
+    ['TP', m.TP, 'accent'], ['FN', m.FN, 'danger'], ['FP', m.FP, 'danger'], ['TN', m.TN, 'accent'],
+    ['inconclusive', m.inconclusive, 'warn'], ['TPR', pct(m.tpr), 'accent'], ['FPR', pct(m.fpr), 'warn'],
+    ['MTTD', m.mttd_sec === null ? 'N/A' : Number(m.mttd_sec).toFixed(2) + 's', ''],
+    ['覆盖率', pct(m.coverage), 'accent'],
+  ];
+  $('#view-validation-metrics').innerHTML = cards.map(([k, v, cls]) =>
+    '<div class="card"><div class="k">' + esc(k) + '</div><div class="v ' + cls + '">' + esc(v) + '</div></div>').join('');
+  $('#view-validation-meta').innerHTML =
+    '<span class="k">run_id</span><span>' + esc(data.run_id) + '</span>' +
+    '<span class="k">用例数</span><span>' + num(data.case_count) + '</span>' +
+    '<span class="k">JSON 报告</span><span class="mono-sm">' + esc(data.report_path || '-') + '</span>' +
+    '<span class="k">Markdown</span><span class="mono-sm">' + esc(data.md_path || '-') + '</span>';
+  const rows = (data.rows || []).map((row) => [
+    esc(row.case_id), esc(row.name || '-'), esc(row.technique || '-'),
+    esc(row.expected), esc(row.observed), verdictTag(row.verdict),
+    esc(row.mttd_sec === null || row.mttd_sec === undefined ? '-' : row.mttd_sec),
+    '<span class="mono-sm">' + esc(row.error || '-') + '</span>',
+  ]);
+  renderTable($('#view-validation'), ['用例', '名称', '技术', '期望', '观测', '判定', 'MTTD(s)', '备注'], rows, '暂无验证结果');
+}
+
+async function loadEngines() {
+  const res = await api('/api/engine-stats?days=7');
+  if (!res.ok) return;
+  const data = res.data;
+  const contribution = data.contribution || [];
+  const max = contribution.reduce((acc, row) => Math.max(acc, Number(row.n || 0)), 0) || 1;
+  $('#view-engines-bars').innerHTML = contribution.length
+    ? contribution.map((row) => {
+        const width = Math.max(3, Math.round((Number(row.n || 0) / max) * 100));
+        return '<div class="bar-row"><span>' + esc(row.first_hit || '-') + '</span>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + width + '%"></div></div>' +
+          '<span>' + num(row.n) + ' 次</span></div>';
+      }).join('')
+    : '<div class="empty">暂无恶意判定记录</div>';
+  const sigma = data.sigma || {};
+  $('#view-engines-sigma').innerHTML =
+    '<span class="k">Sigma 规则总数</span><span>' + num(sigma.total) + '</span>' +
+    '<span class="k">已支持</span><span>' + num(sigma.supported) + '</span>' +
+    '<span class="k">累计命中</span><span>' + num(sigma.hits) + '</span>';
+  const stats = data.engine_stats || [];
+  renderTable($('#view-engines-table'), ['日期', '引擎', '文件', '命中', '恶意', '耗时(ms)', '错误'], stats.map((s) => [
+    esc(s.day), esc(s.engine), num(s.files), num(s.hits), num(s.malicious), num(s.cost_ms), num(s.errors),
+  ]), '暂无引擎统计');
+  const scans = data.recent_scans || [];
+  $('#view-engines-scans').innerHTML = scans.length
+    ? '<div class="table-wrap"><table><thead><tr><th>时间</th><th>路径</th><th>verdict</th><th>score</th><th>first_hit</th></tr></thead><tbody>' +
+      scans.map((s) => '<tr><td>' + esc(fmtTs(s.ts)) + '</td><td>' + esc(s.path) + '</td><td>' +
+        esc(s.verdict) + '</td><td>' + num(s.score) + '</td><td>' + esc(s.first_hit || '-') + '</td></tr>').join('') +
+      '</tbody></table></div>'
+    : '<div class="empty">暂无扫描结果</div>';
+}
+
+/* ----------------------------- 面板切换与自动刷新 ----------------------------- */
+const LOADERS = {
+  overview: async () => {
+    const res = await api('/api/overview');
+    if (res.ok) renderOverview(res.data);
+  },
+  events: loadEvents,
+  alerts: loadAlerts,
+  rules: loadRules,
+  intel: loadIntel,
+  cases: loadCases,
+  validation: loadValidation,
+  engines: loadEngines,
+};
+
+async function loadCurrent() {
+  if (state.busy) return;
+  state.busy = true;
+  try {
+    const loader = LOADERS[state.tab];
+    if (loader) await loader();
+  } finally {
+    state.busy = false;
+  }
+}
+
+function switchTab(key) {
+  state.tab = key;
+  document.querySelectorAll('nav#tabs button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.key === key);
+  });
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === 'panel-' + key);
+  });
+  loadCurrent();
+}
+
+function buildTabs() {
+  $('#tabs').innerHTML = TABS.map((tab) =>
+    '<button data-key="' + tab.key + '">' + esc(tab.label) + '</button>').join('');
+  document.querySelectorAll('nav#tabs button').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.key));
+  });
+}
+
+function startAutoRefresh() {
+  if (state.timer) clearInterval(state.timer);
+  state.timer = setInterval(() => {
+    if ($('#autorefresh').checked && !document.hidden) loadCurrent();
+  }, 10000);
+}
+
+/* ----------------------------- 写操作 ----------------------------- */
+async function reloadRules() {
+  const res = await api('/api/rules', { method: 'POST', body: JSON.stringify({ action: 'reload' }) });
+  if (res.ok) {
+    toast('已提交规则热加载请求');
+    loadRules();
+  }
+}
+
+async function importIntel() {
+  const raw = $('#intel-body').value.trim();
+  if (!raw) { toast('请先填写 IOC JSON 数组', true); return; }
+  let records;
+  try { records = JSON.parse(raw); } catch (err) { toast('JSON 解析失败：' + err, true); return; }
+  if (!Array.isArray(records)) { toast('需要 JSON 数组', true); return; }
+  $('#intel-import-hint').textContent = '导入中…';
+  const res = await api('/api/intel', { method: 'POST', body: JSON.stringify({ records: records }) });
+  if (res.ok) {
+    const d = res.data || {};
+    $('#intel-import-hint').textContent = '导入完成：imported=' + num(d.imported) + '，skipped=' + num(d.skipped) + '，total=' + num(d.total);
+    toast('情报导入完成');
+    loadIntel();
+  } else {
+    $('#intel-import-hint').textContent = '导入失败（见提示）';
+  }
+}
+
+async function createCase() {
+  const title = $('#case-title').value.trim();
+  if (!title) { toast('请填写工单标题', true); return; }
+  const res = await api('/api/cases', {
+    method: 'POST',
+    body: JSON.stringify({ title: title, severity: $('#case-severity').value }),
+  });
+  if (res.ok) {
+    toast('工单已创建：' + (res.data.case_id || ''));
+    $('#case-title').value = '';
+    loadCases();
+  }
+}
+
+/* ----------------------------- 初始化 ----------------------------- */
+function bindEvents() {
+  $('#btn-save-token').addEventListener('click', () => {
+    state.token = $('#token').value.trim();
+    localStorage.setItem('hornwork_token', state.token);
+    toast('token 已保存到 localStorage');
+    setConn('未验证', '');
+    loadCurrent();
+  });
+  $('#token').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') $('#btn-save-token').click(); });
+  $('#ev-load').addEventListener('click', loadEvents);
+  $('#al-load').addEventListener('click', loadAlerts);
+  $('#intel-load').addEventListener('click', loadIntel);
+  $('#case-load').addEventListener('click', loadCases);
+  $('#rules-reload').addEventListener('click', reloadRules);
+  $('#intel-import').addEventListener('click', importIntel);
+  $('#case-create').addEventListener('click', createCase);
+  $('#autorefresh').addEventListener('change', () => {
+    toast($('#autorefresh').checked ? '自动刷新已开启（10s）' : '自动刷新已暂停');
+  });
+  ['ev-type', 'ev-layer', 'al-tech', 'intel-kind', 'case-status'].forEach((id) => {
+    const node = $('#' + id);
+    if (node) node.addEventListener('change', loadCurrent);
+  });
+}
+
+function init() {
+  $('#token').value = state.token;
+  buildTabs();
+  bindEvents();
+  startAutoRefresh();
+  switchTab('overview');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

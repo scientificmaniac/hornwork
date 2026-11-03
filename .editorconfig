@@ -1,0 +1,47 @@
+# EditorConfig: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Python / Markdown：4 空格
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+[*.{md,markdown}]
+indent_size = 4
+trim_trailing_whitespace = false
+
+# YAML / JSON / TOML / 规则数据：2 空格
+[*.{yml,yaml,json,jsonl,toml,csv}]
+indent_size = 2
+
+# Shell：2 空格
+[*.{sh,bash}]
+indent_size = 2
+
+# C 源码：4 空格
+[*.{c,h}]
+indent_size = 4
+
+# Makefile 必须使用制表符
+[Makefile]
+indent_style = tab
+
+# Windows 脚本
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
+
+# 由工具生成、不适合重排的文件
+[{LICENSE,NOTICE,CHANGELOG.md}]
+insert_final_newline = true
+trim_trailing_whitespace = false
+
+[*.zip]
+insert_final_newline = false

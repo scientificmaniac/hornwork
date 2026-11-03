@@ -1,0 +1,275 @@
+{
+  "resultsPerPage": 5,
+  "startIndex": 0,
+  "totalResults": 5,
+  "format": "NVD_CVE",
+  "version": "2.0",
+  "timestamp": "2026-10-26T00:00:00.000",
+  "_fixture_note": "测试夹具：CVE-2021-43798（Grafana）、CVE-2023-38408（OpenSSH）、CVE-2021-23017（nginx）的区间取自项目内已核对的数据；CVE-2099-99999 / CVE-2099-66666 为明显虚构的夹具编号（非真实漏洞），只用于覆盖 exact / cpe_only / OVAL 权威性分支。",
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2021-43798",
+        "published": "2021-12-07T19:15:07.000",
+        "lastModified": "2026-01-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "Grafana versions 8.0.0-beta1 through 8.3.0 (excluding patched releases 8.0.7, 8.1.8, 8.2.7, 8.3.1) contain a path traversal in the plugin static asset route, allowing unauthenticated arbitrary file read."
+          }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+                "baseScore": 7.5,
+                "baseSeverity": "HIGH"
+              }
+            }
+          ]
+        },
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "8.0.0",
+                    "versionEndExcluding": "8.0.7",
+                    "matchCriteriaId": "FIXTURE-GRAFANA-800"
+                  },
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "8.1.0",
+                    "versionEndExcluding": "8.1.8",
+                    "matchCriteriaId": "FIXTURE-GRAFANA-810"
+                  },
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "8.2.0",
+                    "versionEndExcluding": "8.2.7",
+                    "matchCriteriaId": "FIXTURE-GRAFANA-820"
+                  },
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "8.3.0",
+                    "versionEndExcluding": "8.3.1",
+                    "matchCriteriaId": "FIXTURE-GRAFANA-830"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "operator": "AND",
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": false,
+                    "criteria": "cpe:2.3:o:canonical:ubuntu_linux:24.04:*:*:*:*:*:*:*",
+                    "matchCriteriaId": "FIXTURE-UBUNTU-2404"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2023-38408",
+        "published": "2023-07-20T00:00:00.000",
+        "lastModified": "2026-01-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "The PKCS#11 feature in ssh-agent in OpenSSH before 9.3p2 has an insufficiently trustworthy search path, leading to remote code execution if an agent is forwarded to an attacker-controlled system."
+          }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                "baseScore": 9.8,
+                "baseSeverity": "CRITICAL"
+              }
+            }
+          ]
+        },
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "AND",
+                "negate": false,
+                "children": [
+                  {
+                    "operator": "OR",
+                    "negate": false,
+                    "cpeMatch": [
+                      {
+                        "vulnerable": true,
+                        "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+                        "versionEndExcluding": "9.3p2",
+                        "matchCriteriaId": "FIXTURE-OPENSSH-93P2"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2021-23017",
+        "published": "2021-06-01T00:00:00.000",
+        "lastModified": "2026-01-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "A security issue in nginx resolver was identified, which may allow an attacker to overwrite one byte in the heap, potentially leading to denial of service or other impact; nginx versions 0.6.18 through 1.20.0 are affected."
+          }
+        ],
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*",
+                    "versionStartIncluding": "0.6.18",
+                    "versionEndIncluding": "1.20.0",
+                    "matchCriteriaId": "FIXTURE-NGINX-1200"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2099-99999",
+        "published": "2099-01-01T00:00:00.000",
+        "lastModified": "2099-01-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "测试夹具，非真实漏洞：覆盖 CPE 精确版本命中（exact）与仅组件命中（cpe_only）两条分支。"
+          }
+        ],
+        "metrics": {
+          "cvssMetricV31": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "3.1",
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+                "baseScore": 5.0,
+                "baseSeverity": "MEDIUM"
+              }
+            }
+          ]
+        },
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:nginx:nginx:1.20.0:*:*:*:*:*:*:*",
+                    "matchCriteriaId": "FIXTURE-NGINX-EXACT"
+                  },
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*",
+                    "matchCriteriaId": "FIXTURE-NGINX-WILDCARD"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "cve": {
+        "id": "CVE-2099-66666",
+        "published": "2099-02-01T00:00:00.000",
+        "lastModified": "2099-02-01T00:00:00.000",
+        "vulnStatus": "Analyzed",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "测试夹具，非真实漏洞：仅带 CVSS v2 metrics（验证 v2 回退与严重级推导），用于验证包级 OVAL 命中时不再回退 CPE 区间。"
+          }
+        ],
+        "metrics": {
+          "cvssMetricV2": [
+            {
+              "source": "nvd@nist.gov",
+              "type": "Primary",
+              "cvssData": {
+                "version": "2.0",
+                "vectorString": "AV:N/AC:L/Au:N/C:P/I:P/A:P",
+                "baseScore": 8.0
+              }
+            }
+          ]
+        },
+        "configurations": [
+          {
+            "nodes": [
+              {
+                "operator": "OR",
+                "negate": false,
+                "cpeMatch": [
+                  {
+                    "vulnerable": true,
+                    "criteria": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+                    "versionEndExcluding": "99.0",
+                    "matchCriteriaId": "FIXTURE-OPENSSL-ALL"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

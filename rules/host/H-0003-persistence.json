@@ -1,0 +1,28 @@
+{
+  "id": "H-0003",
+  "name": "可疑持久化项写入",
+  "level": 10,
+  "mitre": ["T1543.002", "T1053.003"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["file_create", "file_modify"],
+  "condition": {
+    "all": [
+      {
+        "any": [
+          {"field": "file.path", "op": "prefix", "value": "/etc/cron.d/"},
+          {"field": "file.path", "op": "prefix", "value": "/etc/crontab"},
+          {"field": "file.path", "op": "prefix", "value": "/var/spool/cron/"},
+          {"field": "file.path", "op": "prefix", "value": "/etc/systemd/system/"},
+          {"field": "file.path", "op": "prefix", "value": "/etc/rc.local"},
+          {"field": "file.path", "op": "prefix", "value": "/etc/profile.d/"},
+          {"field": "file.path", "op": "prefix", "value": "/etc/ld.so.preload"},
+          {"field": "file.path", "op": "suffix", "value": "/authorized_keys"},
+          {"field": "file.path", "op": "suffix", "value": "/.bashrc"}
+        ]
+      },
+      {"not": [{"field": "file.path", "op": "suffix", "value": "/hornwork-test"}]}
+    ]
+  },
+  "description": "cron/systemd/rc.local/profile.d/authorized_keys 等持久化位置被写入（TC-03/TC-04/TC-10），白名单 hornwork-test。"
+}

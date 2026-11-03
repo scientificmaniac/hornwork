@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*$py.class
+*.so
+*.pyd
+
+# 打包与分发
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# 测试与覆盖率
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit*.xml
+
+# ---------------------------------------------------------------------------
+# 运行产物
+# ---------------------------------------------------------------------------
+*.log
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# 采集/报告/取证输出（运行期生成；data/records 与 data/templates 是随仓库分发的档案数据，不忽略）
+raw/
+reports/
+tests/_tmp/
+
+# 本地配置与密钥
+.env
+.env.*
+*.pem
+*.key
+!deploy/*.example
+
+# ---------------------------------------------------------------------------
+# IDE / 编辑器：忽略本地状态，仅保留可共享的项目配置
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json.example
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# 操作系统
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini

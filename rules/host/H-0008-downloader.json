@@ -1,0 +1,27 @@
+{
+  "id": "H-0008",
+  "name": "可疑下载工具外联",
+  "level": 6,
+  "mitre": ["T1105"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["process_create"],
+  "condition": {
+    "all": [
+      {
+        "field": "process.image",
+        "op": "regex",
+        "value": "(^|/)(wget|curl|nc|ncat|socat|scp|sftp|tftp|ftp|axel|aria2c)$"
+      },
+      {
+        "any": [
+          {"field": "process.cmdline", "op": "contains", "value": "http://"},
+          {"field": "process.cmdline", "op": "contains", "value": "https://"},
+          {"field": "process.cmdline", "op": "contains", "value": "/tmp/"},
+          {"field": "process.cmdline", "op": "contains", "value": "/dev/shm/"}
+        ]
+      }
+    ]
+  },
+  "description": "下载类工具访问网络或向临时目录落地（TC-02 EICAR 下载链路）。"
+}

@@ -1,0 +1,22 @@
+# /etc/audit/rules.d/hornwork.rules
+-D
+-b 8192
+--backlog_wait_time 60000
+-f 1
+# 进程执行
+-a always,exit -F arch=b64 -S execve -k hornwork_exec
+# 身份/账号
+-w /etc/passwd -p wa -k hornwork_identity
+-w /etc/shadow -p wa -k hornwork_identity
+-w /etc/group  -p wa -k hornwork_identity
+-w /etc/sudoers -p wa -k hornwork_identity
+-w /etc/sudoers.d -p wa -k hornwork_identity
+# 持久化
+-w /etc/cron.d -p wa -k hornwork_persist
+-w /etc/crontab -p wa -k hornwork_persist
+-w /var/spool/cron -p wa -k hornwork_persist
+-w /etc/systemd/system -p wa -k hornwork_persist
+-w /etc/rc.local -p wa -k hornwork_persist
+-w /etc/ld.so.preload -p wa -k hornwork_persist
+# 审计自身
+-w /etc/audit/rules.d -p wa -k hornwork_tamper

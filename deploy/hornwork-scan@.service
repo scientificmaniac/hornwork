@@ -1,0 +1,30 @@
+# 扫描模块：定期漏洞扫描（systemd 定时器）
+#
+# 计划表是数据，timer 只是闹钟：改周期只改 scan_plan 行，不改 unit。
+# 手动与定时走同一入口 `hornworkctl scan run --plan <id>`。
+#
+# 安装：
+#   sudo cp deploy/hornwork-scan@.service deploy/hornwork-scan@.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hornwork-scan@daily-quick.timer
+#   systemctl list-timers 'hornwork-scan*'
+#
+# 说明：%i 为计划 ID（daily-quick / weekly-linux / quarterly-full ...）。
+[Unit]
+Description=Hornwork 漏洞扫描（计划 %i）
+Documentation=file:///opt/hornwork/docs/scanning.md
+After=network-online.target hornwork.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+# 扫描需要本机 dpkg 包清单与 lynis 基线（root），且 nmap 的 -sV 精度依赖原始套接字；
+# 与 daemon 解耦为 oneshot，跑完即退出，不占常驻内存。
+ExecStart=/usr/local/bin/hornworkctl scan run --plan %i --trigger timer
+Environment=PYTHONUNBUFFERED=1
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
+# 失败不无限重试：周期任务下一次会自然补上（Persistent=true 见 timer）
+Restart=no

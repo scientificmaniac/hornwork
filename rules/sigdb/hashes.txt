@@ -1,0 +1,8 @@
+# Hornwork 自研演示签名库：SHA-256 哈希
+# 格式：每行 "sha256" 或 "sha256 名称"；# 开头为注释；空行忽略。
+# 说明：仅用于演示，不包含任何真实恶意样本哈希。
+# EICAR 是业界标准的无害反病毒测试串（68 字节），必须保留。
+275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f eicar-standard-test-file
+89994f00c494958f24d264d9c335412e57916113b13c1777adb5737612bc4264 hornwork-demo-marker
+15197173bce54ca220d9c3c5ebe18672bcc1b5e1e857529f299bd5b40e1c8b0a hornwork-demo-dropper-script
+589f34cc72b2e5693fe18c10abbd828989dd5c072af38a8818d786ce3c0c8080 hornwork-demo-c2-beacon

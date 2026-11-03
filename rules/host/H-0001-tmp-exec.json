@@ -1,0 +1,22 @@
+{
+  "id": "H-0001",
+  "name": "临时目录出现可执行文件落地",
+  "level": 9,
+  "mitre": ["T1105"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["file_create", "file_modify"],
+  "condition": {
+    "all": [
+      {
+        "any": [
+          {"field": "file.path", "op": "prefix", "value": "/tmp/"},
+          {"field": "file.path", "op": "prefix", "value": "/dev/shm/"},
+          {"field": "file.path", "op": "prefix", "value": "/var/tmp/"}
+        ]
+      },
+      {"not": [{"field": "file.path", "op": "suffix", "value": ".log"}]}
+    ]
+  },
+  "description": "FIM 捕获到 /tmp、/dev/shm、/var/tmp 下的文件落地（TC-02 EICAR 下载、挖矿/下载器投放的典型路径）。"
+}

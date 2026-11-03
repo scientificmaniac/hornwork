@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PYTHONIOENCODING: utf-8
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 运行期依赖（与 pyproject.toml 保持一致）
+          python -m pip install "yara-python==4.5.4" "PyYAML==6.0.3"
+          # 认证子系统与部分加固用例所需（当前未写入 pyproject.toml）
+          python -m pip install argon2-cffi cryptography
+
+      - name: Byte-compile package
+        run: python -m compileall -q hornwork
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-py${{ matrix.python-version }}
+          path: tests/_tmp
+          if-no-files-found: ignore
+          retention-days: 7
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Byte-compile package
+        run: python -m compileall -q hornwork
+
+      - name: Validate workflow and issue-template YAML
+        run: |
+          python -m pip install "PyYAML==6.0.3"
+          python - <<'PY'
+          import glob
+          import sys
+
+          import yaml
+
+          files = sorted(glob.glob(".github/**/*.yml", recursive=True))
+          if not files:
+              sys.exit("no YAML files found under .github/")
+          for path in files:
+              with open(path, encoding="utf-8") as handle:
+                  yaml.safe_load(handle)
+              print(f"ok: {path}")
+          PY
+
+      - name: Check required community files
+        run: |
+          for path in LICENSE NOTICE CONTRIBUTING.md SECURITY.md \
+                      CODE_OF_CONDUCT.md CHANGELOG.md \
+                      .gitignore .editorconfig .gitattributes; do
+            test -s "$path" || { echo "missing or empty: $path" >&2; exit 1; }
+          done
+          for path in .github/workflows/ci.yml \
+                      .github/PULL_REQUEST_TEMPLATE.md \
+                      .github/dependabot.yml \
+                      .github/ISSUE_TEMPLATE/bug_report.yml \
+                      .github/ISSUE_TEMPLATE/feature_request.yml \
+                      .github/ISSUE_TEMPLATE/config.yml; do
+            test -s "$path" || { echo "missing or empty: $path" >&2; exit 1; }
+          done
+          echo "all required files present"
+
+      - name: Ruff (advisory, allowed to fail)
+        continue-on-error: true
+        run: |
+          python -m pip install ruff
+          ruff check hornwork tests

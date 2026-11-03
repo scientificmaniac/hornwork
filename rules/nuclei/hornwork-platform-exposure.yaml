@@ -1,0 +1,20 @@
+id: hornwork-platform-exposure
+info:
+  name: 平台健康接口暴露（/healthz 可达）
+  author: hornwork-course-lab
+  severity: medium
+  description: 平台健康检查接口可匿名访问，用于验证 D6 Web PoC 引擎可用性
+  tags: exposure,misconfig
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/healthz"
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"service": "hornwork"'
+      - type: status
+        status:
+          - 200

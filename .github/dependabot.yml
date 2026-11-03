@@ -1,0 +1,38 @@
+# Dependabot 配置：每周检查 Python 依赖与 GitHub Actions
+# 文档：https://docs.github.com/code-security/dependabot/dependabot-options-reference
+version: 2
+updates:
+  # Python 依赖（pyproject.toml）
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    # 解析库/密码学库的升级需要人工复核安全影响，只允许补丁/次版本自动提 PR
+    ignore:
+      - dependency-name: "cryptography"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "argon2-cffi"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "yara-python"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"

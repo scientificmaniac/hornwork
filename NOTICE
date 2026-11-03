@@ -1,0 +1,140 @@
+Hornwork
+Copyright 2026 The Hornwork Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+===============================================================================
+第三方组件与许可（Third-Party Components and Licenses）
+===============================================================================
+
+Hornwork 自身代码以 Apache-2.0 发布。下列第三方组件由 Hornwork 调用或依赖，
+其著作权与许可归各自作者所有，并继续受各自许可证约束：
+
+1. YARA / libyara
+   - 项目：https://github.com/VirusTotal/yara
+   - 许可：BSD-3-Clause
+   - 用途：以 yara-python 扩展模块形式编译并匹配 YARA 规则。
+   - 说明：本仓库不内联分发 libyara 源码或二进制；运行环境通过 PyPI 或
+     系统包管理器安装。
+
+2. yara-python
+   - 项目：https://github.com/VirusTotal/yara-python
+   - 许可：Apache-2.0
+   - 用途：Python 侧的 YARA 规则编译与扫描绑定。
+   - 说明：作为第三方 Python 依赖安装，不修改、不内联分发。
+
+3. ClamAV
+   - 项目：https://www.clamav.net/
+   - 许可：GPL-2.0
+   - 用途：可选的反病毒引擎。
+   - 接入方式：Hornwork 仅作为客户端，通过 Unix domain socket 以
+     clamd INSTREAM 协议把待扫描数据发送给独立运行的 clamd 进程，并读取其
+     返回结果；不链接 libclamav、不加载其头文件、不随本项目分发 ClamAV
+     源码或二进制。
+
+4. Sigma 检测规则
+   - 上游：SigmaHQ / sigma，https://github.com/SigmaHQ/sigma
+   - 许可：Detection Rule License (DRL) 1.1
+     https://github.com/SigmaHQ/Detection-Rule-License
+   - 用途：`rules/sigma/` 下按上游目录结构原样收录的 Linux 规则子集，由
+     Hornwork 自研的 Sigma 子集匹配器解释执行。
+   - 说明：规则文本属于数据文件，按 DRL 1.1 使用与再分发；DRL 1.1 不改变
+     Hornwork 引擎代码的许可。来源、选取范围与上游版本见
+     `rules/sigma/NOTICE.md`。
+
+5. nmap
+   - 项目：https://nmap.org/
+   - 许可：GPL-2.0 / Nmap Public Source License (NPSL) 双许可，以发行版
+     软件包实际附带条款为准。
+   - 用途：端口发现与服务版本识别。
+   - 接入方式：以独立子进程调用 `nmap -sV -oX`，仅解析其 XML 输出；不链接
+     libnmap、不内联分发 nmap 源码或二进制。
+
+6. Lynis
+   - 项目：https://cisofy.com/lynis/
+   - 许可：GPL-3.0
+   - 用途：主机配置基线扫描（hardening index / warnings）。
+   - 接入方式：以独立子进程执行，仅解析生成的 report 文本；不链接、不内联分发。
+
+7. testssl.sh（可选适配器，未随仓库分发）
+   - 项目：https://testssl.sh/
+   - 许可：GPL-2.0
+   - 用途：TLS 配置检查的可选外部引擎。
+   - 接入方式：以独立子进程调用并按 JSON 输出解析；未安装时引擎
+     `available()` 返回 False，任务标记为 partial，不计入已覆盖。
+
+8. nuclei（可选适配器，未随仓库分发）
+   - 项目：https://github.com/projectdiscovery/nuclei
+   - 许可：MIT
+   - 用途：Web/应用 PoC 的可选外部引擎。
+   - 接入方式：以独立子进程调用并按 JSONL 输出解析；未安装时引擎
+     `available()` 返回 False。
+
+9. PyYAML
+   - 项目：https://pyyaml.org/
+   - 许可：MIT
+   - 用途：解析 Sigma 规则、加固基线、靶场索引等 YAML 配置。
+
+10. cryptography
+    - 项目：https://github.com/pyca/cryptography
+    - 许可：Apache-2.0 OR BSD-3-Clause
+    - 用途：认证子系统的 AES-256-GCM、HKDF、HMAC 等密码原语。
+
+11. argon2-cffi
+    - 项目：https://github.com/hynek/argon2-cffi
+    - 许可：MIT
+    - 用途：Argon2id 口令哈希原语（底层为 Argon2 参考实现的绑定）。
+
+12. OpenSSL
+    - 项目：https://www.openssl.org/
+    - 许可：Apache-2.0（OpenSSL 3.x）
+    - 用途：加固编排中的证书签发、Ed25519 签名/验签与 TLS 探测。
+    - 接入方式：命令行（`openssl` 子进程/命令）调用，不链接 libssl/libcrypto。
+
+13. nginx
+    - 项目：https://nginx.org/
+    - 许可：BSD-2-Clause
+    - 用途：加固目标与前后对比测量对象（配置项、TLS 套件）。
+    - 接入方式：作为系统服务/命令行对象，由系统包管理器安装，不链接不分发。
+
+14. cryptsetup
+    - 项目：https://gitlab.com/cryptsetup/cryptsetup
+    - 许可：GPL-2.0
+    - 用途：LUKS2 磁盘加密项的检查与执行。
+    - 接入方式：命令行（`cryptsetup` 子进程）调用，仅解析命令输出；不链接
+      不分发。
+
+15. Pillow（可选）
+    - 项目：https://python-pillow.org/
+    - 许可：MIT-CMU (HPND)
+    - 用途：人脸模板演示中把图像转换为轻量描述子；未安装时该路径不可用，
+      不影响其他能力。
+
+16. Python 标准库 / SQLite
+    - Python：PSF-2.0；SQLite：Public Domain。
+    - 用途：运行时、CLI、Web 控制台与本地存储；不随本仓库分发。
+
+===============================================================================
+许可边界（License Boundary)
+===============================================================================
+- 不链接（no linking）：Hornwork 不以静态或动态链接方式把 GPL/DRL 覆盖的
+  第三方代码并入本项目可执行文件；
+- 不内嵌（no embedding）：不复制其源码、头文件或二进制进本仓库；
+- 独立进程/命令行（separate process / CLI）：通过子进程、Unix socket 或
+  命令行调用，并只消费其输出/返回码；
+- 因此，上述 GPL 组件（ClamAV、nmap、Lynis、cryptsetup 等）的传染性条款
+  不延伸至 Hornwork 自身代码；Apache-2.0/MIT/BSD 许可的库依赖（yara-python、
+  PyYAML、cryptography、argon2-cffi 等）按其各自许可使用，其许可仅约束对应
+  组件本身。
+- 若下游分发方修改或再分发上述第三方组件，须自行遵守其原始许可证（含
+  GPL 源码提供义务、DRL 1.1 署名与修改声明等）。
+
+===============================================================================
+数据与规则来源（Data and Rule Sources）
+===============================================================================
+- NVD CVE JSON 2.0 与 Ubuntu OVAL 数据由使用方离线获取，遵循其官网使用
+  条款，本仓库不分发其原始数据集；
+- 演示用情报与规则只包含 EICAR 无害测试串、RFC 5737 TEST-NET 地址、
+  RFC 2606 保留域名等虚构或保留样本，不含真实恶意样本或真实 IOC；
+- `rules/sigma/` 的规则文件版权归 SigmaHQ 及各规则作者，按 DRL 1.1 保留
+  原始文件头与 id，未修改检测逻辑。

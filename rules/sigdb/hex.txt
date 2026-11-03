@@ -1,0 +1,9 @@
+# Hornwork 自研演示签名库：hex 字节模式
+# 格式：每行 "hexpattern | 名称 | 评分"；hexpattern 允许 ?? 通配；# 开头为注释。
+# 说明：仅演示格式与匹配路径，不包含任何真实恶意样本特征。
+58 35 4F 21 50 25 40 41 50 5B 34 5C 50 5A 58 | eicar-test-string | 80
+53 45 4E 54 49 4E 45 4C 2D 44 45 4D 4F 2D 4D 41 4C 57 41 52 45 | hornwork-demo-marker | 80
+53 45 4E 54 49 4E 45 4C 2D 44 45 4D 4F 2D ?? 41 4C 57 41 52 45 | hornwork-demo-marker-wildcard | 80
+7F 45 4C 46 02 01 01 00 | elf64-header | 40
+55 50 58 21 | upx-packed-marker | 80
+2F 64 65 76 2F 74 63 70 2F | dev-tcp-marker | 60

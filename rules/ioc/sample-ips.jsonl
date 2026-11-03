@@ -1,0 +1,7 @@
+{"type": "ip", "value": "203.0.113.9", "confidence": 90, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "203.0.113.5", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "198.51.100.23", "confidence": 75, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "192.0.2.77", "confidence": 70, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "192.168.234.5", "confidence": 60, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "10.0.0.5", "confidence": 60, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "ip", "value": "127.0.0.9", "confidence": 60, "source": "hornwork-demo-seed", "tlp": "white"}

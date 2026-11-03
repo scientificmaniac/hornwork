@@ -1,0 +1,28 @@
+{
+  "id": "H-0005",
+  "name": "可疑账号操作",
+  "level": 8,
+  "mitre": ["T1136.001"],
+  "engine": "hostrules",
+  "version": "1.0",
+  "event_types": ["account_create", "process_create"],
+  "condition": {
+    "any": [
+      {"field": "event_type", "op": "eq", "value": "account_create"},
+      {
+        "field": "process.image",
+        "op": "in",
+        "value": [
+          "/usr/sbin/useradd",
+          "/usr/sbin/usermod",
+          "/usr/sbin/groupadd",
+          "/usr/sbin/userdel",
+          "/usr/sbin/groupdel",
+          "/usr/sbin/chpasswd",
+          "/usr/bin/passwd"
+        ]
+      }
+    ]
+  },
+  "description": "账号创建事件或 useradd/usermod/groupadd 等账号工具被执行（TC-05）。"
+}

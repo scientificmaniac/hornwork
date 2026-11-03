@@ -1,0 +1,103 @@
+name: 缺陷报告
+description: 报告可复现的功能缺陷（安全漏洞请勿在此提交，见 SECURITY.md）
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的反馈！提交前请确认：
+        - 已搜索现有 Issue，避免重复；
+        - **安全漏洞不要在此公开**，请按 [SECURITY.md](https://github.com/scientificmaniac/hornwork/blob/main/SECURITY.md) 走私密渠道；
+        - 日志请先脱敏（IP、token、口令、密钥）。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已搜索现有 Issue，确认这不是重复问题
+          required: true
+        - label: 我已阅读 SECURITY.md，确认这不是安全漏洞
+          required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？期望的行为是什么？
+      placeholder: 简要描述缺陷现象与影响。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 提供最小可复现步骤；有命令请写完整。
+      placeholder: |
+        1. 执行 `hornworkctl ...`
+        2. 观察 ...
+        3. 出现 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      placeholder: 你期望发生什么？
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Hornwork 版本或提交
+      description: 版本号（`hornworkctl --version`）或 git commit
+      placeholder: 例如 0.1.0 / a1b2c3d
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 发行版、内核、Python 版本、安装方式、是否在容器/虚拟机中
+      placeholder: 例如 Ubuntu 24.04, kernel 6.8, Python 3.12, pip install -e .
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 受影响组件
+      options:
+        - 采集层（auditd / proc / fim / authlog / netcap）
+        - 检测引擎（sigdb / YARA / ClamAV 级联）
+        - 主机与网络规则（host JSON / 网络 DSL / Sigma）
+        - 静态扫描与内存检测
+        - 扫描与 CVE 匹配
+        - 响应、工单与审计链
+        - 靶场编排与漏洞档案
+        - 认证子系统
+        - 加固编排
+        - 验证框架
+        - Web 控制台 / CLI
+        - 构建、安装与部署
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志与输出
+      description: 粘贴关键日志/报错；请先脱敏。
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、相关 Issue、已尝试的排查步骤等。

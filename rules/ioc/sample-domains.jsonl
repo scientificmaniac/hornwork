@@ -1,0 +1,6 @@
+{"type": "domain", "value": "ioc.example", "confidence": 90, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "domain", "value": "c2.example.com", "confidence": 85, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "domain", "value": "update.example.net", "confidence": 75, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "domain", "value": "beacon.example.com", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "domain", "value": "pool.example.com", "confidence": 70, "source": "hornwork-demo-seed", "tlp": "white"}
+{"type": "domain", "value": "exfil.example.org", "confidence": 80, "source": "hornwork-demo-seed", "tlp": "white"}

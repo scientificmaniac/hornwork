@@ -1,0 +1,618 @@
+# 加固模块加固基线（唯一事实来源；CIS Ubuntu 摘录改写 + NIST SP 800-63B/800-52r2 + RFC 5280/8446/9106）
+# 约定：
+#   - 一条 = id/category/title/risk/check/apply/verify；check 必须只读幂等、apply 必须可重复执行、verify 是外部视角复验。
+#   - scope：A/B/C 三类机器的适用性；字符串以 no 开头表示不适用，冒号后的文字就是“为什么没做”。
+#   - order：拓扑序。10 审计/20 权限内核/30 账号服务/40 防火墙/50 SSH/60 密码学/70 TLS。
+#   - rollback：restore=文件备份还原；reverse=反向命令；manual=不可自动回滚（执行前需人工确认）。
+#   - targets：apply 可能改到的文件；执行器在 apply 前统一备份，回滚按快照还原。
+version: 1
+source: "CIS Ubuntu Benchmark（条目摘录改写）+ NIST SP 800-63B / SP 800-52r2 + RFC 5280 / RFC 8446 / RFC 9106"
+items:
+  # ------------------------------------------------------------------ 审计与日志
+  - id: H-AL-01
+    category: audit
+    title: 加固关键配置变更的审计规则（复用检测模块 auditd）
+    risk: low
+    order: 10
+    timeout: 30
+    refs: ["CIS Ubuntu Benchmark — 日志与审计", "GB/T 22239 安全审计"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 用事件日志，由人工检查单覆盖"}
+    targets: ["/etc/audit/rules.d/99-hornwork-harden.rules"]
+    check: |
+      auditctl -l 2>/dev/null | grep -q 'hornwork_harden'
+    apply: |
+      cat > /etc/audit/rules.d/99-hornwork-harden.rules <<'EOF'
+      -w /etc/ssh/sshd_config -p wa -k hornwork_harden
+      -w /etc/ssh/sshd_config.d -p wa -k hornwork_harden
+      -w /etc/sudoers -p wa -k hornwork_harden
+      -w /etc/sysctl.d -p wa -k hornwork_harden
+      EOF
+      augenrules --load >/dev/null
+    verify: |
+      auditctl -l 2>/dev/null | grep -c 'hornwork_harden' | grep -qE '^[4-9]|^[1-9][0-9]'
+    rollback: reverse
+    reverse: |
+      for path in /etc/ssh/sshd_config /etc/ssh/sshd_config.d /etc/sudoers /etc/sysctl.d; do
+        auditctl -W "$path" -p wa -k hornwork_harden 2>/dev/null || true
+      done
+  - id: H-AL-02
+    category: audit
+    title: journald 持久化与容量上限
+    risk: low
+    order: 10
+    refs: ["CIS Ubuntu Benchmark — 日志持久化", "GB/T 22239 安全审计"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    targets: ["/etc/systemd/journald.conf.d/99-hornwork.conf"]
+    check: |
+      grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hornwork.conf 2>/dev/null \
+        && systemctl is-active systemd-journald >/dev/null
+    apply: |
+      install -d -m 755 /etc/systemd/journald.conf.d
+      cat > /etc/systemd/journald.conf.d/99-hornwork.conf <<'EOF'
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=300M
+      SystemKeepFree=1G
+      MaxRetentionSec=30day
+      Compress=yes
+      EOF
+      systemctl restart systemd-journald
+    verify: |
+      grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hornwork.conf \
+        && journalctl --disk-usage >/dev/null && systemctl is-active systemd-journald >/dev/null
+  - id: H-AL-03
+    category: audit
+    title: 时间同步（审计时间线可信）
+    risk: low
+    order: 10
+    refs: ["CIS Ubuntu Benchmark — 时间同步", "GB/T 22239 安全审计"]
+    scope: {A: "yes", B: "yes", C: "partial: Windows 时间服务由人工检查单覆盖"}
+    check: |
+      timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes
+    apply: |
+      systemctl enable --now systemd-timesyncd 2>/dev/null || systemctl enable --now chrony 2>/dev/null || true
+      systemctl restart systemd-timesyncd 2>/dev/null || true
+      sleep 2
+    verify: |
+      timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes
+  - id: H-AL-04
+    category: audit
+    title: 认证/系统日志权限（640 root:adm）
+    risk: low
+    order: 10
+    refs: ["CIS Ubuntu Benchmark — 日志权限", "GB/T 22239 安全审计"]
+    scope: {A: "yes", B: "no: 靶场主机不做加固基线，仅保留采集", C: "no: Windows 不适用"}
+    targets: ["/var/log/auth.log", "/var/log/syslog"]
+    check: |
+      ok=0
+      for f in /var/log/auth.log /var/log/syslog; do
+        [ -f "$f" ] || continue
+        perm=$(stat -c '%a %U %G' "$f")
+        [ "$perm" = "640 root adm" ] || exit 1
+        ok=1
+      done
+      [ "$ok" = 1 ]
+    apply: |
+      for f in /var/log/auth.log /var/log/syslog; do
+        [ -f "$f" ] || continue
+        chmod 640 "$f"; chown root:adm "$f"
+      done
+    verify: |
+      for f in /var/log/auth.log /var/log/syslog; do
+        [ -f "$f" ] || continue
+        [ "$(stat -c '%a %U %G' "$f")" = "640 root adm" ] || exit 1
+      done
+      true
+  # ------------------------------------------------------------------ 权限与内核
+  - id: H-PM-01
+    category: perms
+    title: 关键账号文件权限（shadow/sudoers/sshd_config）
+    risk: mid
+    order: 20
+    refs: ["CIS Ubuntu Benchmark — 文件权限", "GB/T 22239 访问控制—最小权限"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    targets: ["/etc/shadow", "/etc/passwd", "/etc/gshadow", "/etc/sudoers", "/etc/ssh/sshd_config"]
+    check: |
+      [ "$(stat -c '%a' /etc/shadow)" = "640" ] || exit 1
+      [ "$(stat -c '%a' /etc/passwd)" = "644" ] || exit 1
+      [ "$(stat -c '%a' /etc/gshadow)" = "640" ] || exit 1
+      [ "$(stat -c '%a' /etc/sudoers)" = "440" ] || exit 1
+      [ "$(stat -c '%a' /etc/ssh/sshd_config)" = "600" ] || exit 1
+    apply: |
+      chmod 640 /etc/shadow /etc/gshadow; chown root:shadow /etc/shadow /etc/gshadow
+      chmod 644 /etc/passwd; chown root:root /etc/passwd
+      chmod 440 /etc/sudoers; chown root:root /etc/sudoers
+      chmod 600 /etc/ssh/sshd_config; chown root:root /etc/ssh/sshd_config
+    verify: |
+      [ "$(stat -c '%a' /etc/shadow)" = "640" ] \
+        && [ "$(stat -c '%a' /etc/passwd)" = "644" ] \
+        && [ "$(stat -c '%a' /etc/sudoers)" = "440" ] \
+        && [ "$(stat -c '%a' /etc/ssh/sshd_config)" = "600" ]
+  - id: H-PM-02
+    category: perms
+    title: 全局可写文件清零（/etc、/usr/local、/opt/hornwork）
+    risk: mid
+    order: 20
+    refs: ["CIS Ubuntu Benchmark — 全局可写文件", "GB/T 22239 访问控制"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    check: |
+      [ -z "$(find /etc /usr/local -xdev -type f -perm -0002 2>/dev/null)" ]
+    apply: |
+      find /etc /usr/local -xdev -type f -perm -0002 -exec chmod o-w {} + 2>/dev/null || true
+    verify: |
+      [ -z "$(find /etc /usr/local -xdev -type f -perm -0002 2>/dev/null)" ]
+  - id: H-PM-03
+    category: perms
+    title: /dev/shm 挂载 nosuid,nodev,noexec
+    risk: mid
+    order: 20
+    refs: ["CIS Ubuntu Benchmark — 共享内存挂载", "GB/T 22239 入侵防范"]
+    scope: {A: "yes", B: "no: 靶场主机跑 Docker，改动会影响靶场", C: "no: Windows 不适用"}
+    check: |
+      opts=$(findmnt -no OPTIONS /dev/shm 2>/dev/null)
+      echo "$opts" | grep -q nosuid && echo "$opts" | grep -q nodev && echo "$opts" | grep -q noexec
+    apply: |
+      mount -o remount,nosuid,nodev,noexec /dev/shm
+    verify: |
+      findmnt -no OPTIONS /dev/shm | grep -q 'nosuid' && findmnt -no OPTIONS /dev/shm | grep -q 'nodev' \
+        && findmnt -no OPTIONS /dev/shm | grep -q 'noexec'
+    rollback: reverse
+    reverse: |
+      mount -o remount,suid,dev,exec /dev/shm || true
+  - id: H-PM-04
+    category: perms
+    title: 默认 umask 027
+    risk: low
+    order: 20
+    refs: ["CIS Ubuntu Benchmark — umask", "GB/T 22239 访问控制"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    targets: ["/etc/profile.d/99-hornwork-umask.sh"]
+    check: |
+      grep -q 'umask 027' /etc/profile.d/99-hornwork-umask.sh 2>/dev/null
+    apply: |
+      printf '# Hornwork 加固：默认 umask 027\numask 027\n' > /etc/profile.d/99-hornwork-umask.sh
+      chmod 644 /etc/profile.d/99-hornwork-umask.sh
+    verify: |
+      grep -q 'umask 027' /etc/profile.d/99-hornwork-umask.sh
+  - id: H-KR-01
+    category: kernel
+    title: 内核/网络参数加固（sysctl）
+    risk: mid
+    order: 20
+    refs: ["CIS Ubuntu Benchmark — 内核参数", "GB/T 22239 入侵防范"]
+    scope: {A: "yes", B: "no: 靶场主机保留默认以贴近真实靶场", C: "no: Windows 不适用"}
+    targets: ["/etc/sysctl.d/99-hornwork.conf"]
+    check: |
+      for pair in \
+        kernel.randomize_va_space=2 kernel.kptr_restrict=2 kernel.dmesg_restrict=1 \
+        fs.suid_dumpable=0 fs.protected_hardlinks=1 fs.protected_symlinks=1 \
+        net.ipv4.conf.all.rp_filter=1 net.ipv4.tcp_syncookies=1 \
+        net.ipv4.conf.all.accept_redirects=0 net.ipv4.conf.all.send_redirects=0 \
+        kernel.yama.ptrace_scope=1; do
+        key=${pair%=*}; want=${pair#*=}
+        got=$(sysctl -n "$key" 2>/dev/null)
+        [ "$got" = "$want" ] || exit 1
+      done
+    apply: |
+      cat > /etc/sysctl.d/99-hornwork.conf <<'EOF'
+      # Hornwork 加固：内核与网络协议栈
+      kernel.randomize_va_space = 2
+      kernel.kptr_restrict = 2
+      kernel.dmesg_restrict = 1
+      kernel.yama.ptrace_scope = 1
+      fs.suid_dumpable = 0
+      fs.protected_hardlinks = 1
+      fs.protected_symlinks = 1
+      net.ipv4.conf.all.rp_filter = 1
+      net.ipv4.tcp_syncookies = 1
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.all.accept_source_route = 0
+      EOF
+      sysctl --system >/dev/null
+    verify: |
+      sysctl -n kernel.kptr_restrict | grep -qx 2 \
+        && sysctl -n fs.suid_dumpable | grep -qx 0 \
+        && sysctl -n net.ipv4.tcp_syncookies | grep -qx 1 \
+        && sysctl -n kernel.yama.ptrace_scope | grep -qx 1
+    rollback: reverse
+    reverse: |
+      sysctl --system >/dev/null 2>&1 || true
+  # ------------------------------------------------------------------ 账号与服务
+  - id: H-AC-01
+    category: account
+    title: 口令长度策略（minlen=12，长度优先）
+    risk: mid
+    order: 30
+    refs: ["NIST SP 800-63B（长度与黑名单）", "CIS Ubuntu Benchmark — 口令策略"]
+    scope: {A: "yes", B: "no: 靶场需保留弱口令账号", C: "partial: Windows 账户策略用检查单"}
+    targets: ["/etc/security/pwquality.conf.d/99-hornwork.conf"]
+    check: |
+      grep -Eq '^\s*minlen\s*=\s*1[2-9]' /etc/security/pwquality.conf.d/99-hornwork.conf 2>/dev/null \
+        && grep -q pam_pwquality /etc/pam.d/common-password
+    apply: |
+      install -d -m 755 /etc/security/pwquality.conf.d
+      cat > /etc/security/pwquality.conf.d/99-hornwork.conf <<'EOF'
+      # Hornwork 加固：长度优先（SP 800-63B），不强制大小写/符号组合
+      minlen = 12
+      minclass = 0
+      maxrepeat = 3
+      maxclassrepeat = 4
+      dictcheck = 1
+      usercheck = 1
+      enforcing = 1
+      EOF
+    verify: |
+      grep -Eq '^\s*minlen\s*=\s*12' /etc/security/pwquality.conf.d/99-hornwork.conf \
+        && grep -q pam_pwquality /etc/pam.d/common-password
+  - id: H-AC-03
+    category: account
+    title: 空口令账号锁定与 UID 0 唯一性
+    risk: low
+    order: 30
+    refs: ["CIS Ubuntu Benchmark — 空口令/UID 0", "GB/T 22239 身份鉴别"]
+    scope: {A: "yes", B: "no: 靶场运行账号保持原样", C: "no: Windows 不适用"}
+    targets: ["/etc/shadow", "/etc/passwd"]
+    check: |
+      [ -z "$(awk -F: '($2==""){print $1}' /etc/shadow)" ] \
+        && [ "$(awk -F: '($3==0){print $1}' /etc/passwd | wc -l)" -eq 1 ]
+    apply: |
+      for user in $(awk -F: '($2==""){print $1}' /etc/shadow); do passwd -l "$user" >/dev/null; done
+    verify: |
+      [ -z "$(awk -F: '($2==""){print $1}' /etc/shadow)" ] \
+        && [ "$(awk -F: '($3==0){print $1}' /etc/passwd | wc -l)" -eq 1 ]
+  - id: H-AC-04
+    category: account
+    title: sudoers 权限收紧与语法校验
+    risk: high
+    order: 30
+    refs: ["CIS Ubuntu Benchmark — sudo", "GB/T 22239 访问控制"]
+    scope: {A: "yes", B: "no: 靶场需保留 sudo 便利性", C: "no: Windows 不适用"}
+    targets: ["/etc/sudoers"]
+    check: |
+      [ "$(stat -c '%a' /etc/sudoers)" = "440" ] && visudo -c -q >/dev/null 2>&1
+    apply: |
+      chmod 440 /etc/sudoers
+      visudo -c -q
+    verify: |
+      [ "$(stat -c '%a %U %G' /etc/sudoers)" = "440 root root" ] && visudo -c -q >/dev/null 2>&1
+  - id: H-SV-01
+    category: service
+    title: 关闭不需要的服务（avahi/cups/bluetooth/rpcbind）
+    risk: mid
+    order: 30
+    refs: ["CIS Ubuntu Benchmark — 不必要服务", "GB/T 22239 最小安装"]
+    scope: {A: "yes", B: "no: 关服务=靶场环境起不来", C: "no: Windows 不适用"}
+    check: |
+      for service in avahi-daemon cups bluetooth rpcbind; do
+        if systemctl is-enabled "$service" 2>/dev/null | grep -qx enabled; then exit 1; fi
+      done
+      true
+    apply: |
+      for service in avahi-daemon cups bluetooth rpcbind; do
+        systemctl disable --now "$service" >/dev/null 2>&1 || true
+      done
+    verify: |
+      for service in avahi-daemon cups bluetooth rpcbind; do
+        if systemctl is-enabled "$service" 2>/dev/null | grep -qx enabled; then exit 1; fi
+      done
+      true
+    rollback: reverse
+    reverse: |
+      for service in avahi-daemon cups bluetooth rpcbind; do
+        systemctl enable --now "$service" >/dev/null 2>&1 || true
+      done
+  # ------------------------------------------------------------------ 防火墙 / SSH
+  - id: H-SV-04
+    category: service
+    title: 防火墙默认拒绝入站（ufw，放行 22/8443）
+    risk: high
+    order: 40
+    guard_seconds: 900
+    refs: ["CIS Ubuntu Benchmark — 主机防火墙", "GB/T 22239 边界防护"]
+    scope: {A: "yes", B: "no: 开防火墙=扫描模块端口扫不出来", C: "partial: Windows 防火墙用检查单"}
+    check: |
+      ufw status 2>/dev/null | grep -q '^Status: active' \
+        && ufw status verbose 2>/dev/null | grep -qi 'Default: deny (incoming)'
+    apply: |
+      ufw default deny incoming >/dev/null
+      ufw default allow outgoing >/dev/null
+      ufw allow 22/tcp >/dev/null
+      ufw allow 8443/tcp >/dev/null
+      ufw --force enable >/dev/null
+    verify: |
+      ufw status verbose 2>/dev/null | grep -q '^Status: active' \
+        && ufw status verbose 2>/dev/null | grep -qi 'Default: deny (incoming)' \
+        && ufw status 2>/dev/null | grep -q '22/tcp'
+    rollback: reverse
+    reverse: |
+      ufw --force disable >/dev/null 2>&1 || true
+  - id: H-SV-02
+    category: service
+    title: SSH 登录策略（禁 root、限尝试、超时断开）
+    risk: high
+    order: 50
+    guard_seconds: 900
+    refs: ["CIS Ubuntu Benchmark — SSH 服务配置", "NIST SP 800-63B（认证器）"]
+    scope: {A: "yes", B: "no: 改 SSH=靶场模块复现路径变化", C: "no: Windows 不适用"}
+    targets: ["/etc/ssh/sshd_config.d/98-hornwork-ssh-auth.conf"]
+    check: |
+      cfg=$(sshd -T 2>/dev/null)
+      echo "$cfg" | grep -qx 'permitrootlogin no' \
+        && echo "$cfg" | grep -qx 'maxauthtries 4' \
+        && echo "$cfg" | grep -qx 'logingracetime 30' \
+        && echo "$cfg" | grep -qx 'x11forwarding no' \
+        && echo "$cfg" | grep -qx 'clientaliveinterval 300'
+    apply: |
+      cat > /etc/ssh/sshd_config.d/98-hornwork-ssh-auth.conf <<'EOF'
+      # Hornwork 加固：SSH 认证面（保留口令认证作为测试环境回退通道，生产环境应改为 no）
+      PermitRootLogin no
+      MaxAuthTries 4
+      LoginGraceTime 30
+      X11Forwarding no
+      AllowTcpForwarding no
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+      EOF
+      sshd -t && systemctl reload ssh
+    verify: |
+      cfg=$(sshd -T 2>/dev/null)
+      echo "$cfg" | grep -qx 'permitrootlogin no' \
+        && echo "$cfg" | grep -qx 'maxauthtries 4' \
+        && echo "$cfg" | grep -qx 'x11forwarding no'
+    rollback: restore
+    reverse: |
+      systemctl reload ssh 2>/dev/null || true
+  - id: H-SV-03
+    category: service
+    title: SSH 密码算法收敛（KEX/MAC/Cipher）
+    risk: high
+    order: 50
+    guard_seconds: 900
+    refs: ["NIST SP 800-52r2（算法选择思路）", "CIS Ubuntu Benchmark — SSH 算法"]
+    scope: {A: "yes", B: "no: 改 SSH=靶场模块复现路径变化", C: "no: Windows 不适用"}
+    targets: ["/etc/ssh/sshd_config.d/99-hornwork-ssh-crypto.conf"]
+    check: |
+      cfg=$(sshd -T 2>/dev/null)
+      echo "$cfg" | grep -q '^kexalgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512$' \
+        && echo "$cfg" | grep -q '^ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr$' \
+        && echo "$cfg" | grep -q '^macs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com$'
+    apply: |
+      cat > /etc/ssh/sshd_config.d/99-hornwork-ssh-crypto.conf <<'EOF'
+      # Hornwork 加固：删除 CBC/3DES/RC4 与弱 KEX，保留兼容性兜底 aes256-ctr
+      KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
+      Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr
+      MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+      HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+      EOF
+      sshd -t && systemctl reload ssh
+    verify: |
+      cfg=$(sshd -T 2>/dev/null)
+      echo "$cfg" | grep -q '^kexalgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512$' \
+        && echo "$cfg" | grep -q '^ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr$' \
+        && ! echo "$cfg" | grep -q 'hmac-sha1'
+    rollback: restore
+    reverse: |
+      systemctl reload ssh 2>/dev/null || true
+  # ------------------------------------------------------------------ 密码学（口令/证书/签名/磁盘）
+  - id: H-CR-01
+    category: crypto
+    title: 口令哈希迁移到 Argon2id（RFC 9106）
+    risk: high
+    order: 60
+    timeout: 120
+    refs: ["RFC 9106（Argon2 推荐参数）", "NIST SP 800-63B"]
+    scope: {A: "yes", B: "no: 靶场主机不接认证入口", C: "no: Windows 不适用"}
+    targets: ["/var/lib/hornwork/harden/demo/demo_users.db"]
+    check: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pwhash --check
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pwhash --migrate
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pwhash --check --verbose
+  - id: H-CR-02
+    category: crypto
+    title: 内部 CA 与服务证书（ECDSA P-256 / 90 天）
+    risk: high
+    order: 60
+    timeout: 120
+    refs: ["RFC 5280（X.509）", "NIST SP 800-52r2"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    check: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pki --check
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pki --ensure
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool pki --check --verbose
+  - id: H-CR-03
+    category: crypto
+    title: 产物签名与验签卡点（Ed25519）
+    risk: mid
+    order: 60
+    timeout: 120
+    refs: ["Ed25519（RFC 8032）", "GB/T 22239 数据完整性"]
+    scope: {A: "yes", B: "no: 靶场主机不产发布物", C: "no: Windows 不适用"}
+    check: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool sign --check
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool sign --ensure
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool sign --check --verbose
+  - id: H-CR-04
+    category: crypto
+    title: 备份卷静态加密（LUKS2 + Argon2id，回环设备演示）
+    risk: high
+    order: 60
+    timeout: 300
+    refs: ["LUKS2 格式规范", "GB/T 22239 数据保密性"]
+    scope: {A: "yes", B: "no: 靶场主机无备份卷", C: "no: Windows 不适用"}
+    check: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool luks --check
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool luks --ensure
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool luks --check --verbose
+  # ------------------------------------------------------------------ TLS
+  - id: H-TL-01
+    category: tls
+    title: TLS 仅启用 1.2 / 1.3
+    risk: mid
+    order: 70
+    timeout: 120
+    refs: ["RFC 8446（TLS 1.3）", "NIST SP 800-52r2"]
+    scope: {A: "yes", B: "no: 靶场主机不提供 TLS 服务", C: "no: Windows 不适用"}
+    targets: ["/etc/nginx/conf.d/hornwork-tls.conf"]
+    check: |
+      grep -q 'ssl_protocols TLSv1.2 TLSv1.3;' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null \
+        && ! grep -q 'TLSv1 ' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-probe --protocols
+  - id: H-TL-02
+    category: tls
+    title: TLS 套件仅 AEAD（GCM / ChaCha20-Poly1305）
+    risk: mid
+    order: 70
+    timeout: 120
+    refs: ["NIST SP 800-52r2", "RFC 8446"]
+    scope: {A: "yes", B: "no: 靶场主机不提供 TLS 服务", C: "no: Windows 不适用"}
+    targets: ["/etc/nginx/conf.d/hornwork-tls.conf"]
+    check: |
+      grep -q 'ssl_ciphers' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null \
+        && ! grep -qE 'CBC|3DES|RC4' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-probe --ciphers
+  - id: H-TL-03
+    category: tls
+    title: HSTS 与 80→443 强制跳转
+    risk: low
+    order: 70
+    timeout: 60
+    refs: ["RFC 6797（HSTS）", "NIST SP 800-52r2"]
+    scope: {A: "yes", B: "no: 靶场主机不提供 TLS 服务", C: "no: Windows 不适用"}
+    targets: ["/etc/nginx/conf.d/hornwork-tls.conf"]
+    check: |
+      grep -q 'Strict-Transport-Security' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null \
+        && grep -q 'return 301 https://' /etc/nginx/conf.d/hornwork-tls.conf 2>/dev/null
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-probe --hsts
+  - id: H-TL-04
+    category: tls
+    title: 证书体检（有效期/SAN/密钥强度/签名算法）
+    risk: low
+    order: 70
+    timeout: 60
+    refs: ["RFC 5280", "NIST SP 800-52r2"]
+    scope: {A: "yes", B: "no: 靶场主机不提供 TLS 服务", C: "no: Windows 不适用"}
+    check: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool cert-check
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render
+    verify: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool cert-check --verbose
+  # ---------------------------------------------------------------- 平台登录面（五模块整合）
+  - id: H-PL-01
+    category: platform
+    title: 平台控制台仅经 HTTPS 反代对外（TLS1.2/1.3 + HSTS）
+    risk: mid
+    order: 80
+    timeout: 120
+    refs: ["NIST SP 800-52r2", "RFC 8446", "RFC 6797（HSTS）"]
+    scope: {A: "yes", B: "no: 靶场主机不运行平台控制台", C: "no: Windows 不适用"}
+    targets: ["/etc/nginx/conf.d/hornwork-tls.conf"]
+    check: |
+      nginx -T 2>/dev/null | grep -q 'proxy_pass http://127.0.0.1:8787' \
+        && nginx -T 2>/dev/null | grep -q 'ssl_protocols TLSv1.2 TLSv1.3'
+    apply: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render >/dev/null
+      nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    verify: |
+      curl -sk --max-time 8 --resolve a.hornwork.local:8443:127.0.0.1 \
+        https://a.hornwork.local:8443/platform | grep -q 'Hornwork'
+    rollback: reverse
+    reverse: |
+      /opt/hornwork-venv/bin/python -m hornwork.harden.tool tls-render >/dev/null
+      nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  - id: H-PL-02
+    category: platform
+    title: 平台登录锁定与限流策略（5 次失败 / 900 s；TOTP 独立计数）
+    risk: low
+    order: 80
+    timeout: 60
+    refs: ["NIST SP 800-63B（限速与锁定）", "GB/T 22239 身份鉴别"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    targets: []
+    check: |
+      /opt/hornwork-venv/bin/python -c "import sys;sys.path.insert(0,'/opt/hornwork');from hornwork import config;from hornwork.auth import db,engine;cfg=config.load_config('/opt/hornwork/config.toml');p=db.get_policy(engine.AuthEngine(cfg).store,'lockout');sys.exit(0 if p.get('account_fail')==5 and p.get('lock_seconds')==900 and p.get('totp_lock')==900 else 1)"
+    apply: |
+      /opt/hornwork-venv/bin/python -c "import sys;sys.path.insert(0,'/opt/hornwork');from hornwork import config;from hornwork.auth import db,engine;cfg=config.load_config('/opt/hornwork/config.toml');e=engine.AuthEngine(cfg);p=db.get_policy(e.store,'lockout');p.update({'account_fail':5,'account_window':300,'lock_seconds':900,'totp_fail':5,'totp_window':300,'totp_lock':900});db.set_policy(e.store,'lockout',p,by='hardening')"
+    verify: |
+      /opt/hornwork-venv/bin/python -c "import sys;sys.path.insert(0,'/opt/hornwork');from hornwork import config;from hornwork.auth import db,engine;cfg=config.load_config('/opt/hornwork/config.toml');p=db.get_policy(engine.AuthEngine(cfg).store,'lockout');sys.exit(0 if p.get('account_fail')==5 and p.get('lock_seconds')==900 else 1)"
+    rollback: reverse
+    reverse: |
+      /opt/hornwork-venv/bin/python -c "import sys;sys.path.insert(0,'/opt/hornwork');from hornwork import config;from hornwork.auth import db,engine;cfg=config.load_config('/opt/hornwork/config.toml');e=engine.AuthEngine(cfg);p=db.get_policy(e.store,'lockout');p.update({'account_fail':5,'account_window':300,'lock_seconds':900,'totp_fail':5,'totp_window':300,'totp_lock':900});db.set_policy(e.store,'lockout',p,by='rollback')"
+  - id: H-PL-03
+    category: platform
+    title: 平台数据、数据库与签名私钥的最小权限（750/600/700）
+    risk: low
+    order: 80
+    timeout: 60
+    refs: ["CIS Ubuntu Benchmark — 文件权限", "GB/T 22239 访问控制"]
+    scope: {A: "yes", B: "yes", C: "no: Windows 不适用"}
+    targets: []
+    check: |
+      [ "$(stat -c %a /var/lib/hornwork)" = "750" ] \
+        && [ "$(stat -c %a /var/lib/hornwork/hornwork.db)" = "600" ] \
+        && [ "$(stat -c %a /var/lib/hornwork/auth)" = "700" ] \
+        && [ "$(stat -c %a /etc/hornwork/harden/sign.key)" = "600" ]
+    apply: |
+      chown -R hornwork:hornwork /var/lib/hornwork/auth /etc/hornwork/harden
+      chmod 750 /var/lib/hornwork
+      chmod 700 /var/lib/hornwork/auth /etc/hornwork/harden
+      chmod 600 /var/lib/hornwork/hornwork.db /etc/hornwork/harden/sign.key
+    verify: |
+      [ "$(stat -c %a /var/lib/hornwork)" = "750" ] \
+        && [ "$(stat -c %a /var/lib/hornwork/hornwork.db)" = "600" ] \
+        && [ "$(stat -c %a /var/lib/hornwork/auth)" = "700" ] \
+        && [ "$(stat -c %a /etc/hornwork/harden/sign.key)" = "600" ]
+    rollback: reverse
+    reverse: |
+      chmod 644 /var/lib/hornwork/hornwork.db 2>/dev/null || true
+  - id: H-PL-04
+    category: platform
+    title: 平台服务最小权限与 sandbox（非 root、NoNewPrivileges、ProtectSystem=strict）
+    risk: mid
+    order: 80
+    timeout: 90
+    refs: ["systemd.exec(5)", "CIS Ubuntu Benchmark — 服务加固"]
+    scope: {A: "yes", B: "no: 靶场主机不运行平台服务", C: "no: Windows 不适用"}
+    targets: ["/etc/systemd/system/hornwork.service.d/20-platform-hardening.conf"]
+    check: |
+      systemctl show hornwork -p User --value | grep -qx hornwork \
+        && systemctl show hornwork -p NoNewPrivileges --value | grep -qx yes \
+        && systemctl show hornwork -p ProtectSystem --value | grep -qx strict
+    apply: |
+      install -d -m 755 /etc/systemd/system/hornwork.service.d
+      cat > /etc/systemd/system/hornwork.service.d/20-platform-hardening.conf <<'EOF'
+      [Service]
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateDevices=yes
+      RestrictSUIDSGID=yes
+      LockPersonality=yes
+      ReadWritePaths=/var/lib/hornwork /var/log/hornwork /run/hornwork /opt/hornwork/rules /opt/hornwork/raw
+      EOF
+      systemctl daemon-reload && systemctl restart hornwork
+    verify: |
+      systemctl is-active hornwork >/dev/null \
+        && systemctl show hornwork -p NoNewPrivileges --value | grep -qx yes
+    rollback: reverse
+    reverse: |
+      rm -f /etc/systemd/system/hornwork.service.d/20-platform-hardening.conf
+      systemctl daemon-reload && systemctl restart hornwork

