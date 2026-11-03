@@ -16,7 +16,7 @@ flowchart TB
     subgraph Entries["入口"]
         CLI["hornworkctl<br/>hornwork/cli.py"]
         WEB["Web 控制台<br/>hornwork/web/server.py<br/>127.0.0.1:8787"]
-        HARDEN["hardenctl<br/>python  m hornwork.harden"]
+        HARDEN["hardenctl<br/>python -m hornwork.harden"]
     end
 
     subgraph DaemonProc["Hornwork 守护进程（单进程）"]
@@ -50,40 +50,40 @@ flowchart TB
         RUNOUT["运行产物<br/>/var/log/hornwork/app.jsonl<br/>/opt/hornwork/raw"]
     end
 
-    AUD   > BUS
-    PROCC   > BUS
-    FIM   > BUS
-    AUTHLOG   > BUS
-    NET   >|"emit_alert"| BUS
-    PERSIST   >|"emit_event / emit_alert"| BUS
-    MEM   >|"emit_alert"| BUS
-    FIM   >|"file_create / file_modify"| SCANPOOL
-    SCANPOOL   >|"命中"| BUS
-    BUS   > DET
-    BUS   > ALERT
-    DET   >|"Hit → new_alert"| BUS
-    ALERT   > DB
-    DET   > DB
-    SCANPOOL   > DB
-    PERIODIC   > DB
-    PERIODIC   > PERSIST
-    GATE  . >|"只降级扫描类规则"| NET
-    RESPOND   > DB
-    RESPOND  . >|"取证打包"| RUNOUT
-    VERIFY   > DB
-    MEM  . >|"内存快照"| RUNOUT
-    CLI   >|"Unix socket JSON RPC"| CTLS
-    CTLS   > DB
-    CTLS  . > SCANPOOL
-    CTLS  . > MEM
-    CTLS  . > RESPOND
-    CTLS  . > VERIFY
-    CLI   >|"只读回退直读"| DB
-    WEB   >|"进程内 store"| DB
-    HARDEN   >|"文件化状态 + 事件"| DB
-    RULES   > DET
-    RULES   > SCANPOOL
-    RULES   > NET
+    AUD --> BUS
+    PROCC --> BUS
+    FIM --> BUS
+    AUTHLOG --> BUS
+    NET -->|"emit_alert"| BUS
+    PERSIST -->|"emit_event / emit_alert"| BUS
+    MEM -->|"emit_alert"| BUS
+    FIM -->|"file_create / file_modify"| SCANPOOL
+    SCANPOOL -->|"命中"| BUS
+    BUS --> DET
+    BUS --> ALERT
+    DET -->|"Hit → new_alert"| BUS
+    ALERT --> DB
+    DET --> DB
+    SCANPOOL --> DB
+    PERIODIC --> DB
+    PERIODIC --> PERSIST
+    GATE -.->|"只降级扫描类规则"| NET
+    RESPOND --> DB
+    RESPOND -.->|"取证打包"| RUNOUT
+    VERIFY --> DB
+    MEM -.->|"内存快照"| RUNOUT
+    CLI -->|"Unix socket JSON RPC"| CTLS
+    CTLS --> DB
+    CTLS -.-> SCANPOOL
+    CTLS -.-> MEM
+    CTLS -.-> RESPOND
+    CTLS -.-> VERIFY
+    CLI -->|"只读回退直读"| DB
+    WEB -->|"进程内 store"| DB
+    HARDEN -->|"文件化状态 + 事件"| DB
+    RULES --> DET
+    RULES --> SCANPOOL
+    RULES --> NET
 ```
 
 要点：
@@ -177,24 +177,24 @@ flowchart LR
         DB4[("case_ 表")]
     end
 
-    C1   >|"emit_event"| N
-    C2   >|"emit_alert（网络规则命中）"| V
-    C3   >|"emit_alert / emit_event"| N
-    N   >|"校验失败"| DLQ
-    N   >|"bus.publish"| B
-    B   >|"events.*"| H
-    H   > DB1
-    H   > D
-    D   >|"Hit"| A
-    H   >|"file_create / file_modify"| S
-    S   > DB3
-    S   >|"命中"| A
-    A   >|"emit_alert"| V
-    V   >|"alerts.raw"| AB
-    AB   > ST
-    ST   > DB2
-    ST   >|"level ≥ 9 或规则未在 5 min 内建单"| CASE
-    CASE   > DB4
+    C1 -->|"emit_event"| N
+    C2 -->|"emit_alert（网络规则命中）"| V
+    C3 -->|"emit_alert / emit_event"| N
+    N -->|"校验失败"| DLQ
+    N -->|"bus.publish"| B
+    B -->|"events.*"| H
+    H --> DB1
+    H --> D
+    D -->|"Hit"| A
+    H -->|"file_create / file_modify"| S
+    S --> DB3
+    S -->|"命中"| A
+    A -->|"emit_alert"| V
+    V -->|"alerts.raw"| AB
+    AB --> ST
+    ST --> DB2
+    ST -->|"level ≥ 9 或规则未在 5 min 内建单"| CASE
+    CASE --> DB4
 ```
 
 一次事件的完整生命周期：
@@ -211,22 +211,22 @@ sequenceDiagram
     participant ST as Store
     participant AL as on_alert
 
-    COL >>D: emit_event(event dict)
-    D >>SCH: normalize_event + validate_event
+    COL->>D: emit_event(event dict)
+    D->>SCH: normalize_event + validate_event
     alt 校验失败
-        D >>ST: dlq_add("events.raw", ...)
+        D->>ST: dlq_add("events.raw", ...)
     else 校验通过
-        D >>BUS: publish("events.<layer>", ev)
-        BUS >>EV: 异步消费
-        EV >>ST: insert_event(ev, engine=collector)
-        EV >>DET: on_event(ev) → list[Hit]
-        DET  >>EV: Hit[]
-        EV >>D: alert_from_hit(hit, ev)
-        D >>D: emit_alert(new_alert(...))
-        D >>BUS: publish("alerts.raw", alert)
-        BUS >>AL: 异步消费
-        AL >>ST: insert_alert(alert)（唯一索引去重）
-        AL >>ST: 命中且 level ≥ 9 → 自动建单
+        D->>BUS: publish("events.<layer>", ev)
+        BUS->>EV: 异步消费
+        EV->>ST: insert_event(ev, engine=collector)
+        EV->>DET: on_event(ev) → list[Hit]
+        DET->>EV: Hit[]
+        EV->>D: alert_from_hit(hit, ev)
+        D->>D: emit_alert(new_alert(...))
+        D->>BUS: publish("alerts.raw", alert)
+        BUS->>AL: 异步消费
+        AL->>ST: insert_alert(alert)（唯一索引去重）
+        AL->>ST: 命中且 level ≥ 9 → 自动建单
     end
 ```
 
@@ -465,7 +465,7 @@ flowchart TD
     subgraph Entry["入口层"]
         CLI["cli.py（hornworkctl）"]
         DM["daemon.py"]
-        HARDEN["harden/（python  m hornwork.harden）"]
+        HARDEN["harden/（python -m hornwork.harden）"]
     end
 
     subgraph Capability["能力层"]
@@ -491,28 +491,28 @@ flowchart TD
         CTL["ctl.py / client.py"]
     end
 
-    DM   > COL
-    DM   > ENG
-    DM   > RESP
-    DM   > VER
-    DM   > WEB
-    DM   > STO
-    CLI   > DM
-    CLI   > STO
-    CLI   > CTL
-    HARDEN   > HARD
-    COL   > SCH
-    COL   > STO
-    ENG   > SCH
-    ENG   > STO
-    INTEL   > STO
-    RESP   > STO
-    VER   > STO
-    SCAN   > STO
-    AUTH   > STO
-    WEB   > STO
-    COL  . >|"禁止直接 import"| DM
-    ENG  . >|"禁止直接 import"| COL
+    DM --> COL
+    DM --> ENG
+    DM --> RESP
+    DM --> VER
+    DM --> WEB
+    DM --> STO
+    CLI --> DM
+    CLI --> STO
+    CLI --> CTL
+    HARDEN --> HARD
+    COL --> SCH
+    COL --> STO
+    ENG --> SCH
+    ENG --> STO
+    INTEL --> STO
+    RESP --> STO
+    VER --> STO
+    SCAN --> STO
+    AUTH --> STO
+    WEB --> STO
+    COL -.->|"禁止直接 import"| DM
+    ENG -.->|"禁止直接 import"| COL
 ```
 
 依赖规则（由代码结构与契约共同保证）：
