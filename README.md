@@ -4,7 +4,7 @@
 
 简体中文 | [English](README.en.md)
 
-![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
+![CI](https://github.com/scientificmaniac/hornwork/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-FCC624?logo=linux&logoColor=black)
@@ -143,7 +143,7 @@ flowchart TB
 ### 安装
 
 ```bash
-git clone https://github.com/hornwork/hornwork.git
+git clone https://github.com/scientificmaniac/hornwork.git
 cd hornwork
 sudo bash scripts/setup.sh
 ```
