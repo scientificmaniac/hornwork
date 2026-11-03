@@ -66,31 +66,31 @@ flowchart LR
 套件定义在 `hornwork/verify/runner.py` 的 `BASELINE_CASES`；脚本随仓库分发在
 `hornwork/verify/simulate/`（文件名与矩阵一一对应，契约见 §3）。**10 条攻击模拟 + 1 条阴性**：
 
-  用例   名称   ATT&CK   脚本   关键动作   主要验证点  
- --- --- --- --- --- --- 
-  TC-01   Unix Shell 命令执行   T1059.004   `T1059.004.sh`   `env /bin/sh -c 'id; uname -a'`   auditd `execve` / 主机规则  
-  TC-02   本地 HTTP 下载 EICAR 样本   T1105   `T1105.sh`   本地 HTTP 下载 EICAR 到 `/tmp`   FIM + 级联静态扫描 + 告警  
-  TC-03   创建 systemd 服务单元   T1543.002   `T1543.002.sh`   写入 `/etc/systemd/system/hornwork-tc03.service` 后精确删除   持久化检查 / FIM  
-  TC-04   写入 cron 定时任务   T1053.003   `T1053.003.sh`   写入 cron 测试任务并恢复   持久化检查 / 主机规则  
-  TC-05   创建本地账号   T1136.001   `T1136.001.sh`   `useradd` 测试账号并删除   账号异常检查  
-  TC-06   复制 `/etc/shadow`   T1003.008   `T1003.008.sh`   复制 `/etc/shadow` 到临时文件并删除   敏感文件访问规则  
-  TC-07   C2 心跳外联（情报域名）   T1071.001   `T1071.001.sh`   发 3 个 IOC 域名 DNS 查询 + 本地 8080 心跳 10 次   N-0103 情报域名 / N-0106 心跳（**任一命中即 TP**）  
-  TC-08   本地端口扫描   T1046   `T1046.sh`   扫 `127.0.0.1` 1–100 端口   N-0101 SYN 扫描告警  
-  TC-09   PTRACE 注入演示   T1055.008   `T1055.008.sh`   `inject_demo` 注入 nop   memscan 注入告警（A+B 判定）  
-  TC-10   LD_PRELOAD 劫持   T1574.006   `T1574.006.sh`   写 `/etc/ld.so.preload` 并恢复   LD_PRELOAD 后门检查  
-  TC-N1   正常基线操作（阴性）   —   `N-baseline.sh`   `ls` / `date` / `cat /etc/os-release` 等本地只读命令   阴性样本，用于 `FPR`  
+| 用例 | 名称 | ATT&CK | 脚本 | 关键动作 | 主要验证点 |
+|---|---|---|---|---|---|
+| TC-01 | Unix Shell 命令执行 | T1059.004 | `T1059.004.sh` | `env /bin/sh -c 'id; uname -a'` | auditd `execve` / 主机规则 |
+| TC-02 | 本地 HTTP 下载 EICAR 样本 | T1105 | `T1105.sh` | 本地 HTTP 下载 EICAR 到 `/tmp` | FIM + 级联静态扫描 + 告警 |
+| TC-03 | 创建 systemd 服务单元 | T1543.002 | `T1543.002.sh` | 写入 `/etc/systemd/system/hornwork-tc03.service` 后精确删除 | 持久化检查 / FIM |
+| TC-04 | 写入 cron 定时任务 | T1053.003 | `T1053.003.sh` | 写入 cron 测试任务并恢复 | 持久化检查 / 主机规则 |
+| TC-05 | 创建本地账号 | T1136.001 | `T1136.001.sh` | `useradd` 测试账号并删除 | 账号异常检查 |
+| TC-06 | 复制 `/etc/shadow` | T1003.008 | `T1003.008.sh` | 复制 `/etc/shadow` 到临时文件并删除 | 敏感文件访问规则 |
+| TC-07 | C2 心跳外联（情报域名） | T1071.001 | `T1071.001.sh` | 发 3 个 IOC 域名 DNS 查询 + 本地 8080 心跳 10 次 | N-0103 情报域名 / N-0106 心跳（**任一命中即 TP**） |
+| TC-08 | 本地端口扫描 | T1046 | `T1046.sh` | 扫 `127.0.0.1` 1–100 端口 | N-0101 SYN 扫描告警 |
+| TC-09 | PTRACE 注入演示 | T1055.008 | `T1055.008.sh` | `inject_demo` 注入 nop | memscan 注入告警（A+B 判定） |
+| TC-10 | LD_PRELOAD 劫持 | T1574.006 | `T1574.006.sh` | 写 `/etc/ld.so.preload` 并恢复 | LD_PRELOAD 后门检查 |
+| TC-N1 | 正常基线操作（阴性） | — | `N-baseline.sh` | `ls` / `date` / `cat /etc/os-release` 等本地只读命令 | 阴性样本，用于 `FPR` |
 
 用例字段（`BASELINE_CASES` 元素）：
 
-  字段   含义  
- --- --- 
-  `case_id`   `TC-01` … `TC-10`、`TC-N1`，报告与 `validation` 表主键之一  
-  `name`   中文名称（报告/CLI 展示）  
-  `technique`   ATT&CK 技术编号；阴性用例为 `None`  
-  `expected`   `alert_present`（应告警）或 `no_alert`（不应告警）  
-  `rule_ids`   规则线索；`judge` 按 **OR** 语义收窄（任一命中即相关），可为空  
-  `script`   脚本文件名，相对 `verify.simulate_dir`  
-  `post_ctl`   可选，脚本成功后的控制面动作（TC-09 用两次 `mem.scan`）  
+| 字段 | 含义 |
+|---|---|
+| `case_id` | `TC-01` … `TC-10`、`TC-N1`，报告与 `validation` 表主键之一 |
+| `name` | 中文名称（报告/CLI 展示） |
+| `technique` | ATT&CK 技术编号；阴性用例为 `None` |
+| `expected` | `alert_present`（应告警）或 `no_alert`（不应告警） |
+| `rule_ids` | 规则线索；`judge` 按 **OR** 语义收窄（任一命中即相关），可为空 |
+| `script` | 脚本文件名，相对 `verify.simulate_dir` |
+| `post_ctl` | 可选，脚本成功后的控制面动作（TC-09 用两次 `mem.scan`） |
 
 规则线索（`rule_ids`）当前取值：TC-07 为 `["N-0103","N-0106"]`，TC-08 为
 `["N-0101","N-0102"]`，TC-09 为 `["M-0101"]`，其余为空（由 `technique` 兜底匹配）。
@@ -149,10 +149,10 @@ TC-09 是唯一带 `post_ctl` 的用例：
   `[verify].window_sec`，默认 60 s；JSON 报告里记录了实际值），两端都包含；
 - **expected 与 verdict**：
 
-  expected   窗口内有相关告警   窗口内无相关告警  
- --- --- --- 
-  `alert_present`   `TP`（真阳性）   `FN`（漏报）  
-  `no_alert`   `FP`（误报）   `TN`（真阴性）  
+| expected | 窗口内有相关告警 | 窗口内无相关告警 |
+|---|---|---|
+| `alert_present` | `TP`（真阳性） | `FN`（漏报） |
+| `no_alert` | `FP`（误报） | `TN`（真阴性） |
 
 - **"相关告警"的过滤**（三步，依次收窄/兜底）：
   1. 用例给出 `rule_ids` 时先按 `rule_id IN (...)` 查询，**任一规则命中即相关**
@@ -176,18 +176,18 @@ TC-09 是唯一带 `post_ctl` 的用例：
 `hornwork/verify/metrics.py` 的 `compute_metrics(rows)` 对 `validation` 行或
 `judge_case()` 结果统一汇总：
 
-  指标   公式/定义   说明  
- --- --- --- 
-  `TP`   计数   应告警且告警  
-  `TN`   计数   不应告警且未告警  
-  `FP`   计数   不应告警却告警  
-  `FN`   计数   应告警但漏报  
-  `inconclusive`   计数   脚本失败/跳过/判定异常，不计入比率  
-  `TPR`   `TP / (TP + FN)`   真阳性率（检出率）；无正样本时为 `null`  
-  `FPR`   `FP / (FP + TN)`   假阳性率；无阴性样本时为 `null`  
-  `mttd_sec`   `mean(TP 用例的 mttd_sec)`   平均检出时延，保留 2 位小数；无 TP 样本为 `null`  
-  `coverage`   `有 TP 的技术数 / 用例涉及的技术数`   技术覆盖率；分母为 0 时为 `null`  
-  `techniques`   列表   用例涉及的 ATT&CK 技术编号（去重保序）  
+| 指标 | 公式/定义 | 说明 |
+|---|---|---|
+| `TP` | 计数 | 应告警且告警 |
+| `TN` | 计数 | 不应告警且未告警 |
+| `FP` | 计数 | 不应告警却告警 |
+| `FN` | 计数 | 应告警但漏报 |
+| `inconclusive` | 计数 | 脚本失败/跳过/判定异常，不计入比率 |
+| `TPR` | `TP / (TP + FN)` | 真阳性率（检出率）；无正样本时为 `null` |
+| `FPR` | `FP / (FP + TN)` | 假阳性率；无阴性样本时为 `null` |
+| `mttd_sec` | `mean(TP 用例的 mttd_sec)` | 平均检出时延，保留 2 位小数；无 TP 样本为 `null` |
+| `coverage` | `有 TP 的技术数 / 用例涉及的技术数` | 技术覆盖率；分母为 0 时为 `null` |
+| `techniques` | 列表 | 用例涉及的 ATT&CK 技术编号（去重保序） |
 
 约定：**分母为 0 的比率返回 `None`（JSON 里是 `null`），不伪造 0**。
 `metrics_from_validation(rows)` 会从 `validation.payload` 补齐 `technique` / `mttd_sec`
@@ -237,13 +237,13 @@ hornworkctl --json verify run --suite baseline
 
 ### 6.3 产物与查看
 
-  产物   位置/方式  
- --- --- 
-  JSON 报告   `[verify].report_dir/<run_id>.json`  
-  Markdown 摘要   `[verify].report_dir/<run_id>.md`  
-  逐例结果   `validation` 表（`run_id, case_id, technique, expected, observed, verdict, mttd_sec, payload`）  
-  最新报告   `GET /api/validate`（Web 控制台）  
-  控制面   `verify.run` 方法（`{suite, execute}`）  
+| 产物 | 位置/方式 |
+|---|---|
+| JSON 报告 | `[verify].report_dir/<run_id>.json` |
+| Markdown 摘要 | `[verify].report_dir/<run_id>.md` |
+| 逐例结果 | `validation` 表（`run_id, case_id, technique, expected, observed, verdict, mttd_sec, payload`） |
+| 最新报告 | `GET /api/validate`（Web 控制台） |
+| 控制面 | `verify.run` 方法（`{suite, execute}`） |
 
 CLI 非 `--json` 时会打印报告路径、逐例表格和一行汇总：
 
@@ -255,16 +255,16 @@ TP=10 TN=1 FP=0 FN=0 inconclusive=0 TPR=1.0 FPR=0.0 MTTD=0.5s 覆盖率=1.0
 
 一次干净数据库、脚本与依赖齐备、规则库按默认配置加载的完整运行，参考基准为：
 
-  指标   参考值   说明  
- --- --- --- 
-  `TP`   10   10 条攻击模拟全部检出  
-  `TN`   1   阴性基线未误报  
-  `FP`   0   无假阳性  
-  `FN`   0   无漏报  
-  `TPR`   1.0   10 / (10 + 0)  
-  `FPR`   0.0   0 / (0 + 1)  
-  `MTTD`   ≈ 0.5 s   首条告警相对 `t0` 的均值（整数秒采样）  
-  `coverage`   1.0   10 个技术全部有 TP 命中  
+| 指标 | 参考值 | 说明 |
+|---|---|---|
+| `TP` | 10 | 10 条攻击模拟全部检出 |
+| `TN` | 1 | 阴性基线未误报 |
+| `FP` | 0 | 无假阳性 |
+| `FN` | 0 | 无漏报 |
+| `TPR` | 1.0 | 10 / (10 + 0) |
+| `FPR` | 0.0 | 0 / (0 + 1) |
+| `MTTD` | ≈ 0.5 s | 首条告警相对 `t0` 的均值（整数秒采样） |
+| `coverage` | 1.0 | 10 个技术全部有 TP 命中 |
 
 注意事项：
 
@@ -309,22 +309,22 @@ TP=10 TN=1 FP=0 FN=0 inconclusive=0 TPR=1.0 FPR=0.0 MTTD=0.5s 覆盖率=1.0
 
 ## 9. 常见失败与排查
 
-  现象   常见原因   处理  
- --- --- --- 
-  多数用例 `inconclusive`，`error="脚本不存在"`   模拟脚本未提供 / `[verify].simulate_dir` 配置错误   按 §3 放脚本；检查 `simulate_dir` 是否存在、文件名大小写  
-  需要 root 的用例 `SKIP`   非 root 且走 daemon 执行   `sudo hornworkctl verify run` 或补齐 `sudo -n` 权限  
-  用例 `FN`（应告警未告警）   规则未加载 / 采集器未运行 / 窗口过短   `hornworkctl status`、`rules reload`、检查 `[verify].window_sec` 与 `settle_sec`  
-  阴性用例 `FP`   规则过宽（如 `apt update` 命中通用侦察规则）   收窄规则或换更纯的基线命令；不要靠改判定器"修指标"  
-  MTTD 异常大   主机时间不同步 / 告警延迟落库   `timedatectl`、`chronyc tracking`；必要时增大 `settle_sec`  
-  TC-09 无告警   注入失败（ptrace 权限）/ 目标进程提前退出   看报告 `cases[].stdout_tail`、`post_ctl.error`；检查 `kernel.yama.ptrace_scope` 与 `gcc`  
-  报告/验证结果写入失败   `[verify].report_dir` 不可写   检查目录权限（`/opt/hornwork/reports`），或改配置到可写目录  
-  `--no-execute` 也全是 `FN`   数据库里没有对应时间窗的告警   该模式只做 DB 判定，需要先有真实告警（演示/回归用）  
+| 现象 | 常见原因 | 处理 |
+|---|---|---|
+| 多数用例 `inconclusive`，`error="脚本不存在"` | 模拟脚本未提供 / `[verify].simulate_dir` 配置错误 | 按 §3 放脚本；检查 `simulate_dir` 是否存在、文件名大小写 |
+| 需要 root 的用例 `SKIP` | 非 root 且走 daemon 执行 | `sudo hornworkctl verify run` 或补齐 `sudo -n` 权限 |
+| 用例 `FN`（应告警未告警） | 规则未加载 / 采集器未运行 / 窗口过短 | `hornworkctl status`、`rules reload`、检查 `[verify].window_sec` 与 `settle_sec` |
+| 阴性用例 `FP` | 规则过宽（如 `apt update` 命中通用侦察规则） | 收窄规则或换更纯的基线命令；不要靠改判定器"修指标" |
+| MTTD 异常大 | 主机时间不同步 / 告警延迟落库 | `timedatectl`、`chronyc tracking`；必要时增大 `settle_sec` |
+| TC-09 无告警 | 注入失败（ptrace 权限）/ 目标进程提前退出 | 看报告 `cases[].stdout_tail`、`post_ctl.error`；检查 `kernel.yama.ptrace_scope` 与 `gcc` |
+| 报告/验证结果写入失败 | `[verify].report_dir` 不可写 | 检查目录权限（`/opt/hornwork/reports`），或改配置到可写目录 |
+| `--no-execute` 也全是 `FN` | 数据库里没有对应时间窗的告警 | 该模式只做 DB 判定，需要先有真实告警（演示/回归用） |
 
 ## 10. 与其他文档的关系
 
-  文档   关系  
- --- --- 
-  `docs/CONTRACT.md` §6   `judge_case` / `compute_metrics` / `VerifyRunner` / `Forensics` 的接口签名  
-  `docs/interfaces.md`   控制面 `verify.run`、Web `/api/validate`、`validation` 表字段  
-  `hornwork/verify/simulate/README.md`   模拟脚本的**唯一契约**（用例矩阵、脚本规范、环境变量、TC-09 联动）  
-  `docs/architecture.md`   验证层在整体架构中的位置与数据流  
+| 文档 | 关系 |
+|---|---|
+| `docs/CONTRACT.md` §6 | `judge_case` / `compute_metrics` / `VerifyRunner` / `Forensics` 的接口签名 |
+| `docs/interfaces.md` | 控制面 `verify.run`、Web `/api/validate`、`validation` 表字段 |
+| `hornwork/verify/simulate/README.md` | 模拟脚本的**唯一契约**（用例矩阵、脚本规范、环境变量、TC-09 联动） |
+| `docs/architecture.md` | 验证层在整体架构中的位置与数据流 |
