@@ -197,6 +197,19 @@ def _ensure_key_dir() -> None:
     os.chmod(key_dir(), 0o700)
 
 
+def _chmod(path: str | Path, mode: int) -> None:
+    """设置文件权限。
+
+    ``core.sh`` 在非 root 时走 ``sudo -n``，因此由它创建的文件可能属于 root；
+    此时当前进程无法直接 chmod（EPERM）。先尝试本地 chmod，失败再走同一条
+    提权路径，保证「创建者」与「改权限者」权限上下文一致。
+    """
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        core.sh(f"chmod {mode:o} {path}")
+
+
 def cert_info(path: str | Path) -> dict[str, Any]:
     path = str(path)
     if not Path(path).is_file():
@@ -356,10 +369,10 @@ def sign_ensure() -> dict[str, Any]:
     key, pub = key_dir() / "sign.key", key_dir() / "sign.pub"
     if not key.is_file():
         core.sh(f"openssl genpkey -algorithm ED25519 -out {key}")
-        os.chmod(key, 0o600)
+        _chmod(key, 0o600)
     if not pub.is_file():
         core.sh(f"openssl pkey -in {key} -pubout -out {pub}")
-        os.chmod(pub, 0o644)
+        _chmod(pub, 0o644)
     targets: list[tuple[str, Path]] = []
     for kind, path in SIGN_TARGETS:
         targets.append((kind, Path(path)))
