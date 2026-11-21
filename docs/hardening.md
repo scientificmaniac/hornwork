@@ -164,6 +164,15 @@ hardenctl confirm --run <run_id>                        # disarm the timed rollb
   timer after a successful apply;
 - failures are recorded per item (`failed` + restore) and the batch continues.
 
+The run-level `status` is derived from the item statuses (see `executor.classify_status`)
+with this priority: `partially_failed` (any `failed`/`verify_failed`) >
+`not_executed` (every applicable item is `skipped_unconfirmed`/`manual`) >
+`partially_completed` (some done, some skipped) > `succeeded` (nothing outstanding).
+`check`/`dry-run` items (`would_apply`) do not count as unexecuted, so a preview run
+still reports `succeeded`. Only `succeeded`/`running` yield exit code 0; the other
+three statuses return non-zero, so "nothing was hardened because high-risk items
+were skipped" can never be mistaken for success by CI or a nightly job.
+
 ## 7. Rollback
 
 ```bash

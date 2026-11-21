@@ -278,7 +278,7 @@ playbook 是 JSON 编排（`hornwork/respond/playbook.py`），校验规则在 `
     {"id": "s2", "action": "collect_forensics", "mode": "observe"},
     {"id": "s3", "action": "update_case", "params": {"status": "contained"}}
   ],
-  "rollback": [{"action": "restore_file", "when": "verdict == benign"}]
+  "rollback": [{"undo_of": "s1", "when": "verdict == benign"}]
 }
 ```
 
@@ -292,9 +292,12 @@ playbook 是 JSON 编排（`hornwork/respond/playbook.py`），校验规则在 `
 - 步骤 `mode` 会被调用方 `run(mode=...)` **向下封顶**（总开关 observe 时，步骤写
   `enforce` 也不会真执行）；`mode ∈ observe / dry-run / enforce`；
 - 失败即停：任一步失败后不再执行后续步骤，结果里保留已完成步骤明细；
-- `rollback` 目前只做结构校验与声明，`PlaybookRunner` 不会自动执行；`ActionExecutor`
-  可调度的回滚动作只有 `restore_file`，其余（`unblock_ip`/`enable_account`/
-  `unisolate_host`）是语义占位，需要人工或上层编排处理。
+- `rollback` 在 `run()` 末尾按条件自动执行：`undo_of` 引用已执行步骤 id，
+  取该步返回的回滚凭据交给 `ActionExecutor.undo()`；`when` 仅支持 `key == value`
+  （键取上下文或工单字段，如 `verdict == benign`）；结果里以 `rollbacks[]` 返回
+  每条回滚的 `{undo_of, ok, detail}`。旧式 `{"action": "unblock_ip"}` 仍兼容，
+  按映射（`restore_file→quarantine_file`、`unblock_ip→block_ip`、
+  `enable_account→disable_account`、`unisolate_host→isolate_host`）定位要回滚的步骤。
 
 使用方式：
 

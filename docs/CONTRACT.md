@@ -347,8 +347,11 @@ def load_playbook(path) -> dict
 def validate_playbook(pb: dict) -> list[str]
 class PlaybookRunner:
     def __init__(self, store, actions)
-    def run(self, case_id, playbook, mode="observe") -> dict
-          {"case_id","playbook","mode","steps":[{...}],"ok":bool}
+    def run(self, case_id, playbook, mode="observe", context=None) -> dict
+          {"case_id","playbook","mode","steps":[{...}],"ok":bool,
+           "rollbacks":[{"undo_of":step_id,"ok":bool,"detail":str}]}
+    rollback 声明形如 {"undo_of":"s1","when":"verdict == benign"}；
+    when 仅支持 key == value，命中的步骤用执行期凭据调用 actions.undo()。
 
   approve.py
 class ModeGuard:

@@ -5,6 +5,27 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 `FlowTable` 在容量满时因非重入锁导致的确定性死锁（改用 `RLock`）；
+- 修复 `verify_chain(limit)` 截取末段后仍从创世块校验、必然误报断链的问题；
+- 修复响应审计链"读链头→写库"两步无锁导致的并发断链竞态（Store 层原子追加）；
+- 修复静态扫描中单引擎返回脏数据导致整次扫描中断的问题（归一化纳入隔离块）；
+- 修复 PyYAML 六十进制端口反推颠倒、`tls_ports()` 处理字符串 `facts_json` 崩溃、
+  降级 flow 对 ARP 空 IP 的元组比较类型错误；
+- 修复控制面无界请求缓冲、并发统计丢计数、导出路径越界、守护进程控制面启动失败即崩溃；
+- 修复无免密 sudo 环境下 `core.sh()` 静默失败（只读命令降级为普通用户执行）。
+
+### Changed
+
+- 抽取登录公共口令认证段 `_authenticate_password`，统一两条登录路径的安全逻辑与 rehash 审计；
+- 规则目录解析统一到 `engines/_rule_dir.py`，auditd/authlog 的 tail 跟随统一到 `collectors/_tail.py`；
+- playbook `rollback` 由未接线的声明改为按条件自动执行（`undo_of` 引用步骤凭据，
+  兼容旧式 `action`）；加固 run 状态细化为 `not_executed` / `partially_completed`
+  / `partially_failed`，"高危项全部跳过"不再报 `succeeded`；
+- 三套 CVSS 分值分档统一到 `cvss.severity`（容错版 `severity_safe` 保留空串兜底语义）；
+- CLI 按子命令拆分为 `hornwork/commands/` 与 `hornwork/cli_common/` 模块。
+
 ### Planned
 
 - 补充跨发行版的安装与回滚演练脚本；

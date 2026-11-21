@@ -273,7 +273,7 @@ VerifyRunner(store, cfg, ctl_call=None).run(suite="baseline", window_sec=None, e
 | ID | 提供方 → 消费方 | 机制 | 载荷 | 失败处理 |
 |---|---|---|---|---|
 | IF-25 | `hornwork.auth` → `store` | 进程内 SQLite（同库 WAL） | `auth_user` / `auth_credential` / `auth_session` / `bio_template` / `auth_audit` / `auth_policy` / `trusted_device` | 事务回滚；锁等待由 Store `busy_timeout=15 s` 兜底 |
-| IF-26 | `auth.biometric` → 人脸嵌入 | 可插拔：JSON 向量 / 轻量图像描述子 /（预留）`127.0.0.1:8930` HTTP | 512 维 float32 | 失败 → 降级 LOA2 + `degraded` 事件 |
+| IF-26 | `auth.biometric` → 人脸嵌入 | 可插拔：JSON 向量 / 轻量图像描述子 /（预留）`127.0.0.1:8930` HTTP | 512 维 float32 | 可选因子失败 → 降级 LOA2 + `degraded`；LOA3 强制路径下模板全部无法解密 → 拒绝并回 `template_undecryptable`（不伪装成相似度不足） |
 | IF-27 | `auth.audit` → `event` | 进程内 `store.insert_event` | `CanonicalEvent{logon\|logon_fail, source_layer=host, source_product=hornwork-auth, user{name,id,action}, raw.auth{loa,factors,risk,degraded,latency_ms}}` | 写库/序列化失败 → `dlq` 兜底 |
 | IF-28 | `web`/CLI → `auth` | 进程内 `AuthEngine.require_action(token, action)` | `allow` / `stepup_required` / `deny` + LOA | 令牌无效/过期 → deny；LOA 不足 → stepup_required |
 

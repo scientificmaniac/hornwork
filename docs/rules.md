@@ -249,12 +249,15 @@ first_seen_utc,dst_ip,dst_port,c2_status,last_online_utc,malware,confidence
     {"id": "s3", "action": "open_case", "params": {"severity": "P2"}}
   ],
   "rollback": [
-    {"action": "restore_file", "when": "verdict == benign"}
+    {"undo_of": "s1", "when": "verdict == benign"}
   ]
 }
 ```
 
 - 动作名与 `ActionExecutor` 一致：`quarantine_file / collect_forensics / open_case / restore_file`；
+- `rollback[].undo_of` 引用某个步骤 id，回滚时取该步骤执行产生的凭据交给
+  `ActionExecutor.undo()`；`when` 仅支持 `key == value`（键取上下文或工单字段），
+  旧式 `{"action": "unblock_ip"}` 仍兼容（按动作名映射到同类步骤）；
 - `mode ∈ observe / dry-run / enforce`，默认取 `[respond].default_mode="observe"`；
 - 每次执行写 `action_audit`，`hash = sha256(prev_hash + 规范化字段)`，`hornworkctl audit verify` 校验链。
 
