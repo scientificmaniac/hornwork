@@ -20,6 +20,7 @@ import os
 import shutil
 import struct
 import sys
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -351,6 +352,47 @@ class FlowTableTest(unittest.TestCase):
         self.assertEqual(table.age(now=1000.0), 5)
         self.assertEqual(len(table), 0)
         self.assertEqual(table.stats()["flows"], 0)
+
+    def test_update_triggers_evict_without_deadlock(self) -> None:
+        """BUG-01 回归：update() 持锁时内部调用 evict() 不得自锁死。
+
+        用 daemon 线程执行并在超时后判定失败：旧的非重入 Lock 会永久阻塞，
+        但测试套件不会被挂住（daemon 线程随进程退出）。
+        """
+        table = FlowTable(max_flows=2)
+        done = threading.Event()
+        errors: list[str] = []
+
+        def writer() -> None:
+            try:
+                # 每次用不同端口生成新 flow，第 3 次起触发内部 evict()
+                for index in range(10):
+                    table.update(make_packet(ts=1000.0 + index, src_port=40000 + index))
+            except Exception as exc:  # noqa: BLE001 - 线程内异常收集到主线程断言
+                errors.append(repr(exc))
+            finally:
+                done.set()
+
+        t = threading.Thread(target=writer, daemon=True)
+        t.start()
+        self.assertTrue(done.wait(5), "update() 内部触发 evict() 时发生死锁")
+        t.join(timeout=1)
+        self.assertEqual(errors, [])
+        self.assertLessEqual(len(table), 2)
+        self.assertEqual(table.stats()["max_flows"], 2)
+
+    def test_auto_evict_keeps_newest_flows(self) -> None:
+        """容量满时自动淘汰最旧的 flow，保留最新写入的 flow。"""
+        table = FlowTable(max_flows=3)
+        for index in range(6):
+            table.update(make_packet(ts=1000.0 + index, src_port=40000 + index))
+        self.assertLessEqual(len(table), 3)
+        # 最后写入的 flow 必须还在
+        last = make_packet(ts=1005.0, src_port=40005)
+        self.assertIsNotNone(table.get(last))
+        # 最旧的 flow 已被淘汰
+        oldest = make_packet(ts=1000.0, src_port=40000)
+        self.assertIsNone(table.get(oldest))
 
     def test_packet_ts_and_flags(self) -> None:
         from datetime import datetime, timezone
