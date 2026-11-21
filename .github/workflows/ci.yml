@@ -116,8 +116,9 @@ jobs:
           done
           echo "all required files present"
 
-      - name: Ruff (advisory, allowed to fail)
-        continue-on-error: true
+      - name: Ruff (lint gate)
+        # 逻辑规则集在 pyproject.toml 的 [tool.ruff.lint] 中固定；
+        # 版本锁定避免 ruff 升级引入新规则导致门禁行为漂移。
         run: |
-          python -m pip install ruff
+          python -m pip install "ruff==0.17.6"
           ruff check hornwork tests

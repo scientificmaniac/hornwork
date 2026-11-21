@@ -26,6 +26,20 @@ Issues = "https://github.com/scientificmaniac/hornwork/issues"
 [project.scripts]
 hornworkctl = "hornwork.cli:main"
 
+# Ruff 门禁：只启用真正影响正确性/健壮性的规则。
+# 刻意不启用 E501（行长）与 RUF001-3（中文全角标点）——本仓库文档与注释为中文，
+# 这些规则会产生大量误报噪音；按需启用比"全开再排除"更稳，未来 ruff 新增规则不会误伤。
+[tool.ruff.lint]
+select = [
+  "F",        # Pyflakes：未用导入/变量、未定义名等
+  "B",        # flake8-bugbear：异常链、闭包绑定、zip 严格模式等
+  "E713",     # not ... in → not in
+  "E722",     # 裸 except
+  "E731",     # 避免 lambda 赋值
+  "F631",     # assert 元组（永真）
+  "F811",     # 重复定义
+]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
