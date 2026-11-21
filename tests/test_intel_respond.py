@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -523,6 +524,89 @@ class TestActionExecutor(TempCase):
             self.assertTrue(undo["ok"], msg=undo["detail"])
             self.assertTrue(sample.is_file())
             self.assertEqual(verify_chain(store.audit_rows()), (True, None))
+        finally:
+            store.close()
+
+    def test_audit_append_is_atomic_across_threads(self) -> None:
+        """BUG-03 回归：读链头→算哈希→落库必须在同一把锁内完成。
+
+        在 build_rec 回调（临界区内）释放信号，另一线程尝试 acquire 同一把锁：
+        只要原子追加尚未结束，探测线程就必须处于阻塞状态。
+        """
+        store = self.store()
+        try:
+            entered = threading.Event()
+            release = threading.Event()
+            probe_result: list[bool] = []
+
+            def writer() -> None:
+                def build_rec(prev_hash: str) -> dict:
+                    entered.set()  # 已进入临界区
+                    self.assertTrue(release.wait(3), "writer 未被释放")
+                    return {
+                        "ts": schema.utc_now(), "action_id": "ACT-ATOMIC-1",
+                        "case_id": "", "actor": "hornwork", "action": "probe",
+                        "target": "t", "mode": "observe", "result": "ok",
+                        "prev_hash": prev_hash, "hash": "x",
+                    }
+                store.audit_append_atomic(build_rec)
+
+            def probe() -> None:
+                self.assertTrue(entered.wait(3), "writer 未进入临界区")
+                # 非阻塞探测：写事务进行中时，同一把 RLock 应被其他线程占用。
+                probe_result.append(store._lock.acquire(blocking=False))
+                if probe_result[-1]:
+                    store._lock.release()
+
+            t_writer = threading.Thread(target=writer, daemon=True)
+            t_probe = threading.Thread(target=probe, daemon=True)
+            t_writer.start()
+            t_probe.start()
+            self.assertTrue(entered.wait(3))
+            # 让探测线程先尝试，再释放写线程
+            t_probe.join(timeout=3)
+            release.set()
+            t_writer.join(timeout=3)
+            self.assertFalse(t_writer.is_alive(), "writer 线程未结束")
+            self.assertEqual(probe_result, [False], "临界区内锁应被占用（否则原子性被破坏）")
+        finally:
+            store.close()
+
+    def test_concurrent_audit_writes_keep_chain_intact(self) -> None:
+        """8 线程并发写审计，链必须完整且无重复 prev_hash（竞态会断链）。"""
+        store = self.store()
+        try:
+            threads: list[threading.Thread] = []
+            errors: list[str] = []
+
+            def writer(n: int) -> None:
+                try:
+                    for i in range(25):
+                        ActionExecutor(store, self.cfg).audit_event(
+                            f"concurrent-{n}", target=f"t-{n}-{i}", mode="observe"
+                        )
+                except Exception as exc:  # noqa: BLE001 - 线程内异常收集到主线程断言
+                    errors.append(repr(exc))
+
+            for n in range(8):
+                t = threading.Thread(target=writer, args=(n,), daemon=True)
+                threads.append(t)
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+                self.assertFalse(t.is_alive(), "并发写线程未按时结束")
+
+            self.assertEqual(errors, [])
+            rows = store.audit_rows()
+            self.assertEqual(len(rows), 200)
+            ok, bad_seq = verify_chain(rows)
+            self.assertTrue(ok, f"并发写入后哈希链断裂，seq={bad_seq}")
+
+            prev_hashes = [str(r["prev_hash"]) for r in rows]
+            self.assertEqual(prev_hashes[0], "")
+            # 除创世行外，每条的 prev_hash 应是上一行的 hash；
+            # 若出现重复 prev_hash，就是"两个 writer 同时读到同一链头"的竞态痕迹。
+            self.assertEqual(len(set(prev_hashes[1:])), len(prev_hashes) - 1)
         finally:
             store.close()
 
