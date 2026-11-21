@@ -139,7 +139,8 @@ class FlowTable:
         self.max_flows = max(1, int(max_flows))
         self.timeout = float(timeout)
         self.flows: dict[tuple, dict] = {}
-        self._lock = threading.Lock()
+        # update() 持锁时会调用 evict()/age()，必须用可重入锁避免自锁死。
+        self._lock = threading.RLock()
 
     # ---------------------------------------------------------------- key
     def key(self, pkt: dict) -> tuple:

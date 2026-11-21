@@ -7,6 +7,16 @@ from typing import Any
 
 from . import core, crypto, executor
 
+#: run 状态中文文案（未列出的状态原样显示）
+STATUS_CN: dict[str, str] = {
+    "succeeded": "全部完成",
+    "partially_completed": "部分完成（有未执行项）",
+    "not_executed": "未执行（适用项全部跳过）",
+    "partially_failed": "部分失败",
+    "rolled_back": "已回滚",
+    "running": "执行中",
+}
+
 
 def build(
     plan: dict[str, Any],
@@ -83,6 +93,8 @@ def to_markdown(data: dict[str, Any]) -> str:
     add("# 加固模块 加固运行报告")
     add("")
     add(f"- 生成时间：{data['generated_at']}　计划：`{plan['plan_id']}`　运行：`{run['run_id']}`")
+    status = str(run.get("status") or "")
+    add(f"- 运行结果：{STATUS_CN.get(status, status)}（`{status}`）")
     add(f"- 资产/角色：{plan['asset_id']} / {plan['role']}　场景：{plan['scenario']}")
     add(f"- 基线哈希：`{plan['baseline_ref']['sha256']}`　计划哈希：`{plan['plan_sha256']}`")
     add("")

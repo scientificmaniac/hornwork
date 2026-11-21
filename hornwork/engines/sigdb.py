@@ -562,10 +562,11 @@ class SigDbEngine(BaseScanEngine):
     def scan(self, path: str, ctx: dict) -> list[dict]:
         """扫描单个文件，返回 Hit 列表。"""
         ctx = dict(ctx or {})
+        raw_size = ctx.get("size") if ctx.get("size") is not None else os.path.getsize(path)
         try:
-            size = int(ctx.get("size") if ctx.get("size") is not None else os.path.getsize(path))
-        except OSError:
-            raise
+            size = int(raw_size)
+        except (TypeError, ValueError):
+            size = 0
         sha = sha256_file(path)
         hits: list[dict] = []
 

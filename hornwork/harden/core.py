@@ -13,10 +13,9 @@ import re
 import shutil
 import stat as stat_mod
 import subprocess
-import tempfile
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -137,10 +136,16 @@ def sh(cmd: str, timeout: int = 60) -> dict[str, Any]:
     """以 bash 执行命令；非 root 时走 sudo -n（不自研提权逻辑）。"""
     env = dict(os.environ)
     env.update({"LANG": "C", "LC_ALL": "C", "DEBIAN_FRONTEND": "noninteractive"})
-    argv = ["/bin/bash", "-lc", cmd] if is_root() else ["sudo", "-n", "/bin/bash", "-lc", cmd]
+    direct = ["/bin/bash", "-lc", cmd]
+    argv = direct if is_root() else ["sudo", "-n", *direct]
     started = time.time()
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=env)
+        # 非 root 且无免密 sudo 时，直接降级为普通用户执行：
+        # 只读命令（openssl 证书解析等）在无 sudo 环境下仍可正常工作；
+        # 真正需要 root 的写操作会自然失败并由调用方按 rc 判断，不再静默全空。
+        if argv is not direct and proc.returncode != 0 and "sudo" in proc.stderr.lower():
+            proc = subprocess.run(direct, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"rc": 124, "out": "", "err": f"timeout>{timeout}s", "ms": timeout * 1000}
     except FileNotFoundError as exc:

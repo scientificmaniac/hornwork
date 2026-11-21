@@ -12,8 +12,8 @@ from __future__ import annotations
 import re
 import secrets
 import time
-from typing import Any
 
+from ..store import now_utc
 from . import audit, biometric, crypto, db, password, policy, ratelimit, risk, session, totp
 
 USERNAME_RE = re.compile(r"^[a-z][a-z0-9_.-]{1,31}$")
@@ -64,8 +64,6 @@ class AuthEngine:
             raise ValueError(reason)
         phc, algo = password.hash_password(
             user_password, self.keys.pepper, self.argon2_params)
-        from ..store import now_utc
-
         ts = now_utc()
         cur = self.store.execute(
             "INSERT INTO auth_user(username, display_name, password_hash, password_algo,"
@@ -92,8 +90,6 @@ class AuthEngine:
         if not ok:
             raise ValueError(reason)
         phc, algo = password.hash_password(new_password, self.keys.pepper, params)
-        from ..store import now_utc
-
         self.store.execute(
             "UPDATE auth_user SET password_hash=?, password_algo=?, password_ts=?,"
             " must_reset=0, failed_count=0, locked_until=NULL WHERE id=?",
@@ -185,20 +181,26 @@ class AuthEngine:
         return user
 
     # ------------------------------------------------------------------ 登录
-    def start_login(self, username: str, user_password: str, ip: str | None = None,
-                    device_token: str | None = None, now: float | None = None) -> dict:
+    def _authenticate_password(
+        self, username: str, user_password: str, ip: str | None, now: float | None,
+    ) -> tuple[dict | None, dict]:
+        """口令认证公共段：限速 → 防枚举 → 锁定/状态 → 校验 → rehash。
+
+        返回 ``(error_response, context)``：失败时 ``error_response`` 非 None，
+        调用方直接返回；成功时 ``context`` 含 username/user/lockout/t0 供后续编排。
+        """
         t0 = time.perf_counter()
         username = str(username or "").strip()
         lockout = self._section("lockout")
         # IP / 全局限速（只限速不锁定，避免 NAT 误伤）
         if ip and not self.limiter.allow("ip", str(ip), int(lockout.get("ip_rate", 20)),
                                          float(lockout.get("ip_window", 60)), now):
-            return {"status": "rate_limited", "error": "too_many_requests"}
+            return {"status": "rate_limited", "error": "too_many_requests"}, {}
         if not self.limiter.allow("global", "login", int(lockout.get("global_rate", 50)),
                                   float(lockout.get("global_window", 60)), now):
             self._fail(username, None, "pw", "fail", ip=ip, device_id=None,
                        risk=None, detail="global_rate_limited", latency_ms=None)
-            return {"status": "rate_limited", "error": "too_many_requests"}
+            return {"status": "rate_limited", "error": "too_many_requests"}, {}
 
         user = self.get_user(username)
         params = self.argon2_params
@@ -206,36 +208,43 @@ class AuthEngine:
         if not user:
             password.dummy_verify(self.keys.pepper, params)
             self._fail(username, None, "pw", "fail", ip=ip, detail="unknown_user")
-            return {"status": "fail", "error": GENERIC_ERROR}
-
+            return {"status": "fail", "error": GENERIC_ERROR}, {}
         if ratelimit.is_locked(self.store, user, now=now):
             self._fail(username, user, "pw", "fail", ip=ip, detail="account_locked")
-            return {"status": "fail", "error": GENERIC_ERROR, "reason": "locked"}
+            return {"status": "fail", "error": GENERIC_ERROR, "reason": "locked"}, {}
         if str(user["status"]) != "active":
             self._fail(username, user, "pw", "fail", ip=ip,
                        detail=f"status={user['status']}")
-            return {"status": "fail", "error": GENERIC_ERROR}
+            return {"status": "fail", "error": GENERIC_ERROR}, {}
 
-        ok = password.verify_password(user_password, user["password_hash"],
-                                      user["password_algo"], self.keys.pepper, params)
-        if not ok:
+        if not password.verify_password(user_password, user["password_hash"],
+                                        user["password_algo"], self.keys.pepper, params):
             self._fail(username, user, "pw", "fail", ip=ip, detail="wrong_password")
-            ratelimit.record_password_failure(
-                self.store, user, lockout, now=now)
-            return {"status": "fail", "error": GENERIC_ERROR}
+            ratelimit.record_password_failure(self.store, user, lockout, now=now)
+            return {"status": "fail", "error": GENERIC_ERROR}, {}
 
         # 口令通过：清零失败计数；旧哈希在登录成功时渐进迁移
         ratelimit.reset_failures(self.store, user)
-        if password.needs_rehash(user["password_algo"], user["password_hash"], params):
+        old_algo = str(user["password_algo"])
+        if password.needs_rehash(old_algo, user["password_hash"], params):
             phc, algo = password.hash_password(user_password, self.keys.pepper, params)
-            from ..store import now_utc
-
             self.store.execute(
                 "UPDATE auth_user SET password_hash=?, password_algo=?, password_ts=?"
                 " WHERE id=?", (phc, algo, now_utc(), int(user["id"])))
+            # rehash 是安全事件，两条登录路径统一记审计。
             audit.append(self.store, event="rehash", result="ok", username=username,
                          user_id=int(user["id"]), factor="pw",
-                         detail=f"{user['password_algo']}->{algo}")
+                         detail=f"{old_algo}->{algo}")
+
+        return None, {"username": username, "user": user, "lockout": lockout, "t0": t0}
+
+    def start_login(self, username: str, user_password: str, ip: str | None = None,
+                    device_token: str | None = None, now: float | None = None) -> dict:
+        err, ctx = self._authenticate_password(username, user_password, ip, now)
+        if err is not None:
+            return err
+        username, user, lockout, t0 = (
+            ctx["username"], ctx["user"], ctx["lockout"], ctx["t0"])
 
         # 设备令牌（只降风险分，不减少因子）
         device_id = None
@@ -355,8 +364,6 @@ class AuthEngine:
             self.store, self.keys, int(user["id"]), int(ch["required_loa"]),
             ip=ch["ip"], device_id=ch["device_id"], now=now,
             policy=self._section("session.ttl"), strong_auth=ch["required_loa"] >= 3)
-        from ..store import now_utc
-
         self.store.execute("UPDATE auth_user SET last_login_ts=?, failed_count=0"
                            " WHERE id=?", (now_utc(), int(user["id"])))
         latency = int(round((time.perf_counter() - ch["t0"]) * 1000))
@@ -408,47 +415,10 @@ class AuthEngine:
         - 保留 Argon2id+pepper 校验、锁定/限速、风险评分与会话签发；
         - 人脸仅在用户已注册模板且本次提供向量时校验，失败不阻断登录（降为 LOA2）。
         """
-        t0 = time.perf_counter()
-        username = str(username or "").strip()
-        lockout = self._section("lockout")
-        if ip and not self.limiter.allow("ip", str(ip), int(lockout.get("ip_rate", 20)),
-                                         float(lockout.get("ip_window", 60)), now):
-            return {"status": "rate_limited", "error": "too_many_requests"}
-        if not self.limiter.allow("global", "login", int(lockout.get("global_rate", 50)),
-                                  float(lockout.get("global_window", 60)), now):
-            self._fail(username, None, "pw", "fail", ip=ip, device_id=None,
-                       risk=None, detail="global_rate_limited", latency_ms=None)
-            return {"status": "rate_limited", "error": "too_many_requests"}
-
-        user = self.get_user(username)
-        params = self.argon2_params
-        if not user:
-            password.dummy_verify(self.keys.pepper, params)
-            self._fail(username, None, "pw", "fail", ip=ip, detail="unknown_user")
-            return {"status": "fail", "error": GENERIC_ERROR}
-        if ratelimit.is_locked(self.store, user, now=now):
-            self._fail(username, user, "pw", "fail", ip=ip, detail="account_locked")
-            return {"status": "fail", "error": GENERIC_ERROR, "reason": "locked"}
-        if str(user["status"]) != "active":
-            self._fail(username, user, "pw", "fail", ip=ip,
-                       detail=f"status={user['status']}")
-            return {"status": "fail", "error": GENERIC_ERROR}
-
-        ok = password.verify_password(user_password, user["password_hash"],
-                                      user["password_algo"], self.keys.pepper, params)
-        if not ok:
-            self._fail(username, user, "pw", "fail", ip=ip, detail="wrong_password")
-            ratelimit.record_password_failure(self.store, user, lockout, now=now)
-            return {"status": "fail", "error": GENERIC_ERROR}
-
-        ratelimit.reset_failures(self.store, user)
-        if password.needs_rehash(user["password_algo"], user["password_hash"], params):
-            phc, algo = password.hash_password(user_password, self.keys.pepper, params)
-            from ..store import now_utc
-
-            self.store.execute(
-                "UPDATE auth_user SET password_hash=?, password_algo=?, password_ts=?"
-                " WHERE id=?", (phc, algo, now_utc(), int(user["id"])))
+        err, ctx = self._authenticate_password(username, user_password, ip, now)
+        if err is not None:
+            return err
+        username, user, t0 = ctx["username"], ctx["user"], ctx["t0"]
 
         self.reload_policy()
         risk_res = risk.score(self.store, user, ip=ip, device_id=None,
@@ -481,8 +451,6 @@ class AuthEngine:
         issued = session.issue(
             self.store, self.keys, int(user["id"]), loa, ip=ip, device_id=None, now=now,
             policy=self._section("session.ttl"), strong_auth=loa >= 3)
-        from ..store import now_utc
-
         self.store.execute("UPDATE auth_user SET last_login_ts=?, failed_count=0"
                            " WHERE id=?", (now_utc(), int(user["id"])))
         latency = int(round((time.perf_counter() - t0) * 1000))
@@ -600,4 +568,4 @@ class AuthEngine:
 def _dt(now: float | None):
     from datetime import datetime, timezone
 
-    return datetime.fromtimestamp(float(now), tz=timezone.utc) if now else None
+    return datetime.fromtimestamp(float(now), tz=timezone.utc) if now is not None else None

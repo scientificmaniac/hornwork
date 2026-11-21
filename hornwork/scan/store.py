@@ -20,7 +20,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any, Iterable
 
 from .. import schema
@@ -207,6 +206,35 @@ DDL: list[str] = [
 # ---------------------------------------------------------------------------
 # 基础工具
 # ---------------------------------------------------------------------------
+_ENSURED_MARK = "_scan_schema_ensured"
+"""挂在 ``Store`` 实例上的标记属性名，表示扫描子系统表结构已就绪。"""
+
+
+def ensure_schema(store: Any) -> None:
+    """确保扫描子系统的表结构存在（幂等，且**每个 Store 实例只真正执行一次**）。
+
+    与 :func:`init_schema` 的区别：
+
+    - ``init_schema`` 无条件执行全部 DDL，供写路径显式调用；
+    - ``ensure_schema`` 先在实例上做标记，已建过就直接返回。
+
+    为什么需要它：扫描子系统的读函数（``list_plans`` / ``list_tasks`` /
+    ``list_findings`` / ``list_snapshots`` …）在**全新数据目录**上会因表不存在
+    抛 ``sqlite3.OperationalError: no such table``。此前只有写路径（``upsert_plan``
+    等）调用 ``init_schema``，于是"先查后写"的命令在空库上必然崩溃。
+
+    修法选择在**数据访问层**统一兜底，而不是在每个 CLI 命令里各补一次：这样
+    CLI、Web 只读查询、daemon 三条调用路径都受益，也不需要 30 个读函数各加一行。
+    """
+    if getattr(store, _ENSURED_MARK, False):
+        return
+    init_schema(store)
+    try:
+        setattr(store, _ENSURED_MARK, True)
+    except AttributeError:  # pragma: no cover - Store 允许动态属性，此处仅防御
+        pass
+
+
 def init_schema(store: Any) -> None:
     """幂等建表 + 补列（旧库升级用）。"""
     for statement in DDL:
@@ -326,16 +354,19 @@ def upsert_asset(store: Any, rec: dict) -> dict:
 
 
 def get_asset(store: Any, asset_id: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM asset WHERE asset_id=?", (str(asset_id),))
     return _decode_asset(row) if row else None
 
 
 def get_asset_by_ip(store: Any, ip: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM asset WHERE ip=? ORDER BY enabled DESC LIMIT 1", (str(ip),))
     return _decode_asset(row) if row else None
 
 
 def list_assets(store: Any, enabled: bool | None = None, limit: int = 500) -> list[dict]:
+    ensure_schema(store)
     sql = "SELECT * FROM asset"
     args: list[Any] = []
     if enabled is not None:
@@ -382,6 +413,7 @@ def update_asset_facts(store: Any, asset_id: str, patch: dict) -> None:
 
 
 def set_asset_enabled(store: Any, asset_id: str, enabled: bool) -> bool:
+    ensure_schema(store)
     cur = store.execute(
         "UPDATE asset SET enabled=? WHERE asset_id=?", (1 if enabled else 0, str(asset_id))
     )
@@ -390,6 +422,7 @@ def set_asset_enabled(store: Any, asset_id: str, enabled: bool) -> bool:
 
 def select_assets(store: Any, selector: dict | None, include_disabled: bool = False) -> list[dict]:
     """按选择器展开目标资产（台账是唯一目标来源，展开逻辑集中在此）。
+    ensure_schema(store)
 
     选择器字段（全部可选，AND 语义）：
     ``asset_ids`` / ``ids``（显式列表）、``group``、``role``、``tags``（任一命中）、
@@ -466,11 +499,13 @@ def upsert_plan(store: Any, rec: dict) -> dict:
 
 
 def get_plan(store: Any, plan_id: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM scan_plan WHERE plan_id=?", (str(plan_id),))
     return _decode_plan(row) if row else None
 
 
 def list_plans(store: Any, enabled: bool | None = None, limit: int = 100) -> list[dict]:
+    ensure_schema(store)
     sql = "SELECT * FROM scan_plan"
     args: list[Any] = []
     if enabled is not None:
@@ -493,6 +528,7 @@ def _decode_plan(row: dict | None) -> dict | None:
 
 
 def set_plan_enabled(store: Any, plan_id: str, enabled: bool) -> bool:
+    ensure_schema(store)
     cur = store.execute(
         "UPDATE scan_plan SET enabled=? WHERE plan_id=?", (1 if enabled else 0, str(plan_id))
     )
@@ -547,6 +583,7 @@ def create_task(store: Any, rec: dict) -> tuple[dict, bool]:
 
 
 def get_task(store: Any, task_id: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM scan_task WHERE task_id=?", (str(task_id),))
     return _decode_task(row) if row else None
 
@@ -555,6 +592,7 @@ def list_tasks(
     store: Any, run_id: str | None = None, plan_id: str | None = None,
     status: str | None = None, limit: int = 50,
 ) -> list[dict]:
+    ensure_schema(store)
     sql = "SELECT * FROM scan_task WHERE 1=1"
     args: list[Any] = []
     if run_id:
@@ -572,6 +610,7 @@ def list_tasks(
 
 
 def tasks_for_run(store: Any, run_id: str) -> list[dict]:
+    ensure_schema(store)
     return [_decode_task(row) for row in store.query(
         "SELECT * FROM scan_task WHERE run_id=? ORDER BY asset_id", (str(run_id),)
     )]
@@ -689,11 +728,13 @@ def upsert_finding(store: Any, rec: dict, *, seen: bool = True) -> dict:
 
 
 def get_finding(store: Any, finding_id: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM scan_finding WHERE finding_id=?", (str(finding_id),))
     return _decode_finding(row) if row else None
 
 
 def get_finding_by_key(store: Any, asset_id: str, key: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one(
         "SELECT * FROM scan_finding WHERE asset_id=? AND finding_key=?", (str(asset_id), str(key))
     )
@@ -705,6 +746,7 @@ def list_findings(
     status: str | None = None, kind: str | None = None, check_id: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
+    ensure_schema(store)
     sql = "SELECT * FROM scan_finding WHERE 1=1"
     args: list[Any] = []
     for column, value in (
@@ -731,6 +773,7 @@ def _decode_finding(row: dict | None) -> dict | None:
 
 def set_finding_status(store: Any, finding_id: str, status: str, reason: str | None = None) -> bool:
     """人工处置：状态流转白名单 + 原因留痕（写 evidence_json._review）。"""
+    ensure_schema(store)
     if status not in FINDING_STATUSES:
         raise ValueError(f"非法 finding 状态：{status}")
     row = store.query_one("SELECT * FROM scan_finding WHERE finding_id=?", (str(finding_id),))
@@ -746,6 +789,7 @@ def set_finding_status(store: Any, finding_id: str, status: str, reason: str | N
 
 
 def findings_for_asset(store: Any, asset_id: str, status_in: Iterable[str] | None = None) -> list[dict]:
+    ensure_schema(store)
     rows = list_findings(store, asset_id=asset_id, limit=100000)
     if status_in:
         wanted = set(status_in)
@@ -755,6 +799,7 @@ def findings_for_asset(store: Any, asset_id: str, status_in: Iterable[str] | Non
 
 def missing_findings(store: Any, asset_id: str, seen_keys: set[str]) -> list[dict]:
     """本次任务未复现的既有 finding（用于 miss_count / fixed 判定）。"""
+    ensure_schema(store)
     out = []
     for row in findings_for_asset(
         store, asset_id, status_in=("new", "observed", "confirmed", "reopened")
@@ -765,6 +810,7 @@ def missing_findings(store: Any, asset_id: str, seen_keys: set[str]) -> list[dic
 
 
 def finding_counts(store: Any) -> dict:
+    ensure_schema(store)
     by_status = {row["status"]: int(row["n"]) for row in store.query(
         "SELECT status, COUNT(*) AS n FROM scan_finding GROUP BY status"
     )}
@@ -796,17 +842,20 @@ def create_snapshot(store: Any, rec: dict) -> dict:
 
 
 def get_snapshot(store: Any, snapshot_id: str) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM scan_snapshot WHERE snapshot_id=?", (str(snapshot_id),))
     return _decode_snapshot(row) if row else None
 
 
 def latest_snapshot(store: Any) -> dict | None:
+    ensure_schema(store)
     row = store.query_one("SELECT * FROM scan_snapshot ORDER BY ts DESC LIMIT 1")
     return _decode_snapshot(row) if row else None
 
 
 def previous_snapshot(store: Any, snapshot_id: str) -> dict | None:
     """同一计划内、时间早于给定快照的最近一次快照。"""
+    ensure_schema(store)
     current = get_snapshot(store, snapshot_id)
     if not current:
         return None
@@ -819,6 +868,7 @@ def previous_snapshot(store: Any, snapshot_id: str) -> dict | None:
 
 
 def list_snapshots(store: Any, limit: int = 20) -> list[dict]:
+    ensure_schema(store)
     rows = store.query("SELECT * FROM scan_snapshot ORDER BY ts DESC LIMIT ?", (int(limit),))
     return [_decode_snapshot(row) for row in rows]
 
@@ -834,6 +884,7 @@ def _decode_snapshot(row: dict | None) -> dict | None:
 
 def set_base_snapshot(store: Any, snapshot_id: str) -> bool:
     """登记基线快照（同计划互斥：先清空同计划旧基线）。"""
+    ensure_schema(store)
     snap = get_snapshot(store, snapshot_id)
     if not snap:
         return False
@@ -865,12 +916,14 @@ def add_snapshot_items(store: Any, snapshot_id: str, items: list[dict]) -> int:
 
 
 def snapshot_items(store: Any, snapshot_id: str) -> list[dict]:
+    ensure_schema(store)
     return store.query(
         "SELECT * FROM scan_snapshot_item WHERE snapshot_id=?", (str(snapshot_id),)
     )
 
 
 def snapshot_items_map(store: Any, snapshot_id: str) -> dict[tuple[str, str], dict]:
+    ensure_schema(store)
     return {
         (row["asset_id"], row["finding_key"]): row
         for row in snapshot_items(store, snapshot_id)
@@ -893,6 +946,7 @@ def update_snapshot_stats(store: Any, snapshot_id: str, stats: dict) -> None:
 # diff 统计
 # ---------------------------------------------------------------------------
 def save_diff_stat(store: Any, cur: str, prev: str, stats: dict) -> None:
+    ensure_schema(store)
     store.execute(
         """INSERT OR REPLACE INTO scan_diff_stat(cur, prev, new, fixed, persisting,
              regressed, ts) VALUES(?,?,?,?,?,?,?)""",
@@ -904,6 +958,7 @@ def save_diff_stat(store: Any, cur: str, prev: str, stats: dict) -> None:
 
 
 def list_diff_stats(store: Any, limit: int = 12) -> list[dict]:
+    ensure_schema(store)
     return store.query(
         "SELECT * FROM scan_diff_stat ORDER BY ts DESC LIMIT ?", (int(limit),)
     )
@@ -913,6 +968,7 @@ def list_diff_stats(store: Any, limit: int = 12) -> list[dict]:
 # CVE 辅助（导入/匹配在 scan.cve 子包，这里只放跨模块通用查询）
 # ---------------------------------------------------------------------------
 def cve_count(store: Any) -> int:
+    ensure_schema(store)
     try:
         row = store.query_one("SELECT COUNT(DISTINCT cve_id) AS n FROM cve_cache")
         return int(row["n"]) if row else 0
@@ -921,6 +977,7 @@ def cve_count(store: Any) -> int:
 
 
 def cve_severity_counts(store: Any) -> dict:
+    ensure_schema(store)
     try:
         rows = store.query(
             "SELECT severity, COUNT(DISTINCT cve_id) AS n FROM cve_cache GROUP BY severity"
@@ -932,6 +989,7 @@ def cve_severity_counts(store: Any) -> dict:
 
 def scan_overview(store: Any) -> dict:
     """扫描概览计数（CLI status / Web overview 用）。"""
+    ensure_schema(store)
     init_schema(store)
     counts: dict[str, int] = {}
     for name, sql in (

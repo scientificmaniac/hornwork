@@ -33,11 +33,11 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from ..config import cfg_get
 from ..log import get_logger
+from ._rule_dir import resolve_rule_dir
 from .base import make_hit
 from .netflow import FLAG_ALIASES, FLAG_BITS, packet_ts, parse_flags_set
 from .tracker import Tracker
@@ -510,15 +510,6 @@ def parse_rules(text: str, source: str = "") -> tuple[list[NetRule], list[str]]:
 # ---------------------------------------------------------------------------
 # 规则集
 # ---------------------------------------------------------------------------
-def _resolve_rule_dir(cfg: dict, kind: str, dotted: str) -> Path:
-    """定位规则目录：配置目录存在则用它，否则回退到 `<general.rule_dir>/<kind>`。"""
-    configured = cfg_get(cfg, dotted, "")
-    if configured and Path(str(configured)).is_dir():
-        return Path(str(configured))
-    base = Path(str(cfg_get(cfg, "general.rule_dir", "/opt/hornwork/rules")))
-    return base / kind
-
-
 class NetRuleSet:
     """加载 `rules/net/*.rules` 并按包求值。"""
 
@@ -529,7 +520,7 @@ class NetRuleSet:
         self.store = store
         #: 扫描模块扫描窗口门（可选）。daemon 注入后，窗口内的自扫流量不再触发扫描类告警。
         self.scan_gate: Any = None
-        self.net_dir = _resolve_rule_dir(self.cfg, "net", "engines.net_rule_dir")
+        self.net_dir = resolve_rule_dir(self.cfg, "net", "engines.net_rule_dir")
         self.home_net = self._parse_home_net(cfg_get(self.cfg, "net.home_net", ""))
         self.dedup_sec = float(cfg_get(self.cfg, "net.dedup_sec", 60) or 60)
         self.default_window = float(cfg_get(self.cfg, "net.tracker_window_sec", 5) or 5)

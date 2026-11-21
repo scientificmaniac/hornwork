@@ -964,5 +964,63 @@ class NetPipelineTest(unittest.TestCase):
         self.assertEqual(tracker.last_packet_ts("1.1.1.1", "3.3.3.3"), 100.6)
 
 
+class TailFollowerTest(unittest.TestCase):
+    """公共 tail 跟随骨架：完整行、半行回退、轮转策略。"""
+
+    def setUp(self):
+        self.tmp = _TMP_ROOT / uuid.uuid4().hex
+        self.tmp.mkdir(parents=True, exist_ok=True)
+        self.path = self.tmp / "tail.log"
+        self.path.write_text("", encoding="utf-8")
+        self.lines: list[str] = []
+        self.rotations: list[int] = []
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _follower(self, start_offset):
+        from hornwork.collectors._tail import TailFollower
+
+        return TailFollower(
+            str(self.path),
+            on_line=self.lines.append,
+            on_stat=lambda key: self.rotations.append(1) if key == "rotations" else None,
+            on_error=lambda msg: None,
+            start_offset=start_offset,
+        )
+
+    def test_full_lines_and_partial_rollback(self):
+        # 首次从空文件末尾跟随，随后追加两行完整 + 一行半行
+        f = self._follower(lambda st, rotated, prev: st.st_size)
+        self.assertTrue(f.ensure_open())
+        self.path.write_text("line1\nline2\npartial", encoding="utf-8")
+        self.assertEqual(f.read_available(), 2)
+        self.assertEqual(self.lines, ["line1", "line2"])
+        # 半行不消费：offset 停在 partial 之前
+        self.assertLess(f.offset, self.path.stat().st_size)
+        # 补齐换行后再读，得到第三行
+        with open(self.path, "a", encoding="utf-8") as handle:
+            handle.write("-done\n")
+        self.assertEqual(f.read_available(), 1)
+        self.assertEqual(self.lines, ["line1", "line2", "partial-done"])
+        f.close()
+
+    def test_rotation_strategy(self):
+        # 轮转后按策略从新文件头读
+        f = self._follower(lambda st, rotated, prev: 0 if rotated else st.st_size)
+        self.assertTrue(f.ensure_open())  # 首次：末尾
+        old_ino = f.ino
+        self.path.write_text("after-rotate\n", encoding="utf-8")
+        # 模拟轮转：用新 inode 重新打开
+        self.path.unlink()
+        self.path.write_text("after-rotate\n", encoding="utf-8")
+        self.assertTrue(f.ensure_open())
+        self.assertNotEqual(f.ino, old_ino)
+        self.assertGreaterEqual(len(self.rotations), 1)
+        self.assertEqual(f.read_available(), 1)
+        self.assertEqual(self.lines, ["after-rotate"])
+        f.close()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
@@ -23,6 +22,7 @@ from typing import Any
 from .. import schema
 from ..log import get_logger
 from . import BaseCollector
+from ._tail import TailFollower
 
 log = get_logger("collector.authlog")
 
@@ -209,10 +209,15 @@ class AuthLogCollector(BaseCollector):
             float(self.conf("collect.auth.bruteforce_window_sec", WINDOW_SEC)),
         )
         self.poll = float(self.conf("collect.auth.poll_interval_ms", 300)) / 1000.0
-        self._fh: Any = None
-        self._ino: int | None = None
+        self.tail = TailFollower(
+            self.path,
+            on_line=self._handle_line,
+            on_stat=self.stat_add,
+            on_error=lambda msg: self.error(msg),
+            start_offset=self._start_offset,
+            label="auth 日志",
+        )
         self._journal: subprocess.Popen | None = None
-        self._last_missing_warn = 0.0
 
     def _init_stats(self) -> dict[str, Any]:
         return {
@@ -292,77 +297,21 @@ class AuthLogCollector(BaseCollector):
         log.info("authlog 开始跟随文件", path=self.path)
         try:
             while not self.stopping:
-                if self._ensure_open():
+                opened = self.tail.ensure_open()
+                self.stat_set("waiting", 0 if opened else 1)
+                if opened:
                     try:
-                        self._read_available()
+                        self.tail.read_available()
                     except OSError as exc:
                         self.error("读取 auth 日志失败", exc=repr(exc))
-                        self._close()
-                self.sleep(self.poll if self._fh is not None else 1.0)
+                        self.tail.close()
+                self.sleep(self.poll if self.tail.open else 1.0)
         finally:
-            self._close()
+            self.tail.close()
 
-    def _ensure_open(self) -> bool:
-        try:
-            stat = os.stat(self.path)
-        except OSError:
-            self._close()
-            self.stat_set("waiting", 1)
-            now = time.time()
-            if now - self._last_missing_warn > 10.0:
-                self._last_missing_warn = now
-                self.error("auth 日志不存在，1s 后重试", path=self.path)
-            return False
-        if self._fh is not None and self._ino == stat.st_ino:
-            self.stat_set("waiting", 0)
-            return True
-        rotated = self._fh is not None or self._ino is not None
-        if rotated:
-            self.stat_add("rotations")
-        self._close()
-        try:
-            handle = open(self.path, "r", encoding="utf-8", errors="replace")
-        except OSError as exc:
-            self.error("打开 auth 日志失败", path=self.path, exc=repr(exc))
-            return False
-        if not rotated:
-            # 首次打开从文件末尾跟随；轮转后的新文件从头读
-            handle.seek(0, os.SEEK_END)
-        self._fh = handle
-        self._ino = stat.st_ino
-        self.stat_set("waiting", 0)
-        return True
-
-    def _read_available(self, budget: int = 5000) -> int:
-        handle = self._fh
-        if handle is None:
-            return 0
-        count = 0
-        while count < budget:
-            pos = handle.tell()
-            try:
-                line = handle.readline()
-            except (OSError, UnicodeDecodeError) as exc:
-                self.error("authlog 读取行失败", exc=repr(exc))
-                break
-            if not line:
-                break
-            if not line.endswith("\n"):
-                handle.seek(pos)
-                break
-            count += 1
-            self.stat_add("lines")
-            self._handle_line(line.rstrip("\r\n"))
-        return count
-
-    def _close(self) -> None:
-        handle, self._fh = self._fh, None
-        self._ino = None
-        if handle is not None:
-            try:
-                handle.close()
-            except OSError:
-                pass
+    def _start_offset(self, st: Any, rotated: bool, previous_ino: int | None) -> int:
+        """起始偏移：轮转后的新文件从头读，首次打开从末尾跟随。"""
+        return 0 if rotated else st.st_size
 
     # ------------------------------------------------------------ 事件处理
     def _handle_line(self, line: str) -> None:

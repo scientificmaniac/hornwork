@@ -151,6 +151,23 @@ class SeverityTest(unittest.TestCase):
             with self.subTest(score=score):
                 self.assertEqual(cvss.severity(score), expected)
 
+    def test_safe_matches_severity_on_valid(self):
+        """合法分值时 severity_safe 与 severity 完全一致（同一套阈值）。"""
+        for score in (0.0, 0.1, 3.9, 4.0, 6.9, 7.0, 8.9, 9.0, 10.0):
+            with self.subTest(score=score):
+                self.assertEqual(cvss.severity_safe(score), cvss.severity(score))
+
+    def test_safe_returns_blank_on_invalid(self):
+        """非法/越界值返回空串（供 ``a or b`` 兜底，不能变成"无"）。"""
+        for bad in (None, "", "abc", -1, -0.1, 10.1, 100, [1], {}):
+            with self.subTest(value=bad):
+                self.assertEqual(cvss.severity_safe(bad), "")
+
+    def test_safe_accepts_numeric_strings(self):
+        for text, expected in (("9.8", "严重"), ("7.5", "高"), ("0", "无")):
+            with self.subTest(text=text):
+                self.assertEqual(cvss.severity_safe(text), expected)
+
 
 class ExplainTest(unittest.TestCase):
     def test_fields(self):

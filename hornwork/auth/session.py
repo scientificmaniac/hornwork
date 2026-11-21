@@ -87,7 +87,7 @@ def verify(store, keyring: crypto.KeyRing, token: str, now: float | None = None,
         raise SessionError("unknown")
     if int(row["revoked"]):
         raise SessionError("revoked")
-    ts_now = now_iso = _now_iso(now)
+    now_iso = _now_iso(now)
     if str(row["expires_ts"]) <= now_iso:
         raise SessionError("expired")
     if str(row["idle_expires_ts"]) <= now_iso:
@@ -132,8 +132,10 @@ def list_sessions(store, user_id: int | None = None, active_only: bool = True,
         sql += " AND user_id=?"
         args.append(int(user_id))
     if active_only:
-        sql += " AND revoked=0 AND expires_ts>?"
-        args.append(now_utc())
+        # 同时排除 absolute 与 idle 两个过期维度，避免列出已失效会话。
+        now = now_utc()
+        sql += " AND revoked=0 AND expires_ts>? AND idle_expires_ts>?"
+        args.extend((now, now))
     sql += " ORDER BY created_ts DESC LIMIT ?"
     args.append(int(limit))
     return store.query(sql, args)

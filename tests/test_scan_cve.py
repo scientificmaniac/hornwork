@@ -820,6 +820,18 @@ class MatcherTest(_StoreCase):
         self.assertEqual(feed.cvss_severity(4.0), "中")
         self.assertEqual(feed.cvss_severity(0.1), "低")
         self.assertEqual(feed.cvss_severity(0), "无")
+        # 非法值返回空串（供 or 兜底），与 cvss.severity_safe 一致
+        self.assertEqual(feed.cvss_severity("bogus"), "")
+        self.assertEqual(feed.cvss_severity(None), "")
+        self.assertEqual(feed.cvss_severity(-1), "")
+        self.assertEqual(feed.cvss_severity(10.1), "")
+        # matcher 的兜底分档与 feed/cvss 同源，边界必须一致
+        for score in (0, 0.1, 3.9, 4.0, 6.9, 7.0, 8.9, 9.0, 9.8, 10.0):
+            with self.subTest(score=score):
+                self.assertEqual(matcher.severity_cn_from_score(score),
+                                 feed.cvss_severity(score))
+        self.assertEqual(matcher.severity_cn_from_score("bogus"), "")
+        self.assertEqual(matcher.severity_cn_from_score(None), "")
 
     def test_match_perf_and_candidate_budget(self):
         facts = [

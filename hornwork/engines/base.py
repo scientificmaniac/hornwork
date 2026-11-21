@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Protocol, TypedDict, runtime_checkable
 
 
 class Hit(TypedDict, total=False):

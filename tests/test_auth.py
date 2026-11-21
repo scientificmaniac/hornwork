@@ -219,7 +219,7 @@ class BiometricTest(AuthTestBase):
         self.assertAlmostEqual(biometric.cosine(a, b), biometric.cosine(ta, tb), places=6)
         # 逆变换可还原（证明正交、也说明"变换本身可逆，机密性靠 AEAD"）
         back = biometric.inverse_transform(ta, seed)
-        for x, y in zip(back[:8], a[:8]):
+        for x, y in zip(back[:8], a[:8], strict=True):
             self.assertAlmostEqual(x, y, places=6)
         # 换种子 = 撤销（旧模板与新变换不可比）
         seed2 = crypto.KeyRing.from_config(self.cfg).derive(b"auth|bio|seed|99", 32)

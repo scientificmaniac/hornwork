@@ -33,6 +33,7 @@ from typing import Any, Iterator
 
 from ... import schema
 from ...log import get_logger
+from ...vuln import cvss
 from .version import extract_version
 
 log = get_logger("scan.cve.feed")
@@ -170,20 +171,11 @@ def severity_cn(raw: Any) -> str:
 
 
 def cvss_severity(score: Any) -> str:
-    """按 CVSS baseScore 推导中文级别（NVD v2 无 baseSeverity 时回退）。"""
-    try:
-        value = float(score)
-    except (TypeError, ValueError):
-        return ""
-    if value >= 9.0:
-        return "严重"
-    if value >= 7.0:
-        return "高"
-    if value >= 4.0:
-        return "中"
-    if value > 0.0:
-        return "低"
-    return "无"
+    """按 CVSS baseScore 推导中文级别（NVD v2 无 baseSeverity 时回退）。
+
+    分档阈值集中在 :func:`hornwork.vuln.cvss.severity`；非法值返回 ``""``。
+    """
+    return cvss.severity_safe(score)
 
 
 def _extract_cvss(metrics: Any) -> tuple[float | None, str]:

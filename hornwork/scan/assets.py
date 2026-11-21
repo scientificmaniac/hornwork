@@ -53,17 +53,23 @@ def normalize_tags(tags: Any) -> list[str]:
     return []
 
 
-def declared_ports(asset: dict | None) -> list[int]:
-    """取资产声明端口：``facts_json.declared_ports`` 或 ``tags`` 里的 ``ports:...``。"""
-    if not asset:
-        return []
-    ports: list[int] = []
-    facts = asset.get("facts_json") or {}
+def _facts(asset: dict | None) -> dict:
+    """解析 facts_json：可能是 dict，也可能是 JSON 字符串。"""
+    facts = (asset or {}).get("facts_json") or {}
     if isinstance(facts, str):
         try:
             facts = json.loads(facts)
         except (TypeError, ValueError):
             facts = {}
+    return facts if isinstance(facts, dict) else {}
+
+
+def declared_ports(asset: dict | None) -> list[int]:
+    """取资产声明端口：``facts_json.declared_ports`` 或 ``tags`` 里的 ``ports:...``。"""
+    if not asset:
+        return []
+    ports: list[int] = []
+    facts = _facts(asset)
     for item in facts.get("declared_ports") or []:
         try:
             port = int(item)
@@ -87,7 +93,7 @@ def tls_ports(asset: dict | None) -> list[int]:
     if not asset:
         return []
     ports: list[int] = []
-    facts = asset.get("facts_json") or {}
+    facts = _facts(asset)
     for item in facts.get("tls_ports") or []:
         try:
             ports.append(int(item))

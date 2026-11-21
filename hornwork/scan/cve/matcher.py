@@ -27,6 +27,7 @@ from typing import Any
 
 from ...config import cfg_get
 from ...log import get_logger
+from ...vuln import cvss
 from . import cmap, feed, version
 from .feed import UBUNTU_CODENAMES, severity_cn
 
@@ -380,20 +381,11 @@ def _make_entry(
 
 
 def severity_cn_from_score(score: Any) -> str:
-    """按 CVSS 分值推导中文级别（档案/NVD 都没给英文级时的兜底）。"""
-    try:
-        value = float(score)
-    except (TypeError, ValueError):
-        return ""
-    if value >= 9.0:
-        return "严重"
-    if value >= 7.0:
-        return "高"
-    if value >= 4.0:
-        return "中"
-    if value > 0.0:
-        return "低"
-    return "无"
+    """按 CVSS 分值推导中文级别（档案/NVD 都没给英文级时的兜底）。
+
+    分档阈值集中在 :func:`hornwork.vuln.cvss.severity`；非法值返回 ``""``。
+    """
+    return cvss.severity_safe(score)
 
 
 def _judge_cpe_row(

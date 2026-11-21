@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from ..config import cfg_get

@@ -204,26 +204,25 @@ class ActionExecutor:
     def _audit(self, action: str, target: str, mode: str, result: str,
                action_id: str, case_id: str | None) -> None:
         """追加一行审计记录并计算哈希链。"""
+        def build_rec(prev_hash: str) -> dict[str, Any]:
+            rec = {
+                "ts": schema.utc_now(),
+                "action_id": action_id,
+                "case_id": case_id or "",
+                "actor": "hornwork",
+                "action": action,
+                "target": target,
+                "mode": mode,
+                "result": result,
+                "prev_hash": prev_hash,
+            }
+            rec["hash"] = compute_hash(prev_hash, rec)
+            return rec
+
         try:
-            last = self.store.audit_last() or {}
-        except Exception:  # noqa: BLE001 - 存储异常不得阻断动作
-            last = {}
-        prev_hash = str(last.get("hash") or "")
-        rec = {
-            "ts": schema.utc_now(),
-            "action_id": action_id,
-            "case_id": case_id or "",
-            "actor": "hornwork",
-            "action": action,
-            "target": target,
-            "mode": mode,
-            "result": result,
-            "prev_hash": prev_hash,
-        }
-        rec["hash"] = compute_hash(prev_hash, rec)
-        try:
-            self.store.audit_append(rec)
-        except Exception as exc:  # noqa: BLE001
+            # 读链头与落库在同一把锁内完成，避免多线程并发写断链。
+            self.store.audit_append_atomic(build_rec)
+        except Exception as exc:  # noqa: BLE001 - 存储异常不得阻断动作
             log.error("审计写入失败", error=str(exc), action_id=action_id)
 
     # ------------------------------------------------------------------ 命令执行
@@ -775,7 +774,7 @@ class ActionExecutor:
             delete = ["iptables", "-w", "-D", chain, "-d" if chain == "OUTPUT" else "-s",
                       target, "-m", "comment", "--comment", comment, "-j", "DROP"]
         if mode == "observe":
-            return {"ok": True, "detail": f"observe：将删除封禁规则（未执行）", "target": target,
+            return {"ok": True, "detail": "observe：将删除封禁规则（未执行）", "target": target,
                     "rollback": {}}
         if mode == "dry-run":
             return {"ok": True, "detail": "dry-run: " + " ".join(shlex.quote(a) for a in delete),

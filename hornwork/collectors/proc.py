@@ -72,7 +72,7 @@ def _parse_proc_stat(text: str) -> dict[str, int] | None:
     end = text.rfind(")")
     if end < 0:
         return None
-    head, tail = text[: text.find("(")], text[end + 2:]
+    tail = text[end + 2:]
     parts = tail.split()
     if len(parts) < 20:
         return None

@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -215,7 +216,8 @@ class VerifyRunner:
             raise ValueError(f"unknown verify suite: {suite}")
         window = int(window_sec if window_sec is not None else cfg_get(self.cfg, "verify.window_sec", 60))
         settle = float(cfg_get(self.cfg, "verify.settle_sec", 3) or 0)
-        run_id = "run-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        # 加短随机后缀，避免同一秒内两次运行互相覆盖报告/验证结果。
+        run_id = "run-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
         started_at = _now()
         daemon = self._ctl_status()
 

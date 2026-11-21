@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -653,6 +652,17 @@ class Store:
             )
             self.conn.commit()
             return int(cur.lastrowid or 0)
+
+    def audit_append_atomic(self, build_rec) -> int:
+        """在同一把锁内完成「读链头 → 计算哈希 → 落库」，消除并发断链竞态。
+
+        ``build_rec(prev_hash)`` 接收当前链头哈希，返回完整审计记录。
+        """
+        with self._lock:
+            last = self.query_one("SELECT hash FROM action_audit ORDER BY seq DESC LIMIT 1")
+            prev = str((last or {}).get("hash") or "")
+            rec = build_rec(prev)
+            return self.audit_append(rec)
 
     def audit_rows(self) -> list[dict]:
         return self.query("SELECT * FROM action_audit ORDER BY seq ASC")

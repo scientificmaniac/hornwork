@@ -166,7 +166,7 @@ class TestYaraRules(unittest.TestCase):
         try:
             import yara  # noqa: PLC0415
         except ImportError:
-            raise unittest.SkipTest("未安装 yara-python，跳过 YARA 编译")
+            raise unittest.SkipTest("未安装 yara-python，跳过 YARA 编译") from None
         # 用 sources={stem: text} 编译，规避 Windows libyara 对非 ASCII 文件路径的限制
         try:
             rules = yara.compile(
@@ -206,12 +206,12 @@ class TestNetRules(unittest.TestCase):
         try:
             from hornwork.engines.netrules import NetRuleSet  # noqa: PLC0415
         except Exception as exc:  # noqa: BLE001
-            raise unittest.SkipTest(f"hornwork.engines.netrules.NetRuleSet 不可用：{exc}")
+            raise unittest.SkipTest(f"hornwork.engines.netrules.NetRuleSet 不可用：{exc}") from exc
         try:
             ruleset = NetRuleSet(self.cfg)
             rules = ruleset.rules()
         except Exception as exc:  # noqa: BLE001
-            raise unittest.SkipTest(f"NetRuleSet 接口尚不可用（{exc}）")
+            raise unittest.SkipTest(f"NetRuleSet 接口尚不可用（{exc}）") from exc
 
         ids = [r.get("rule_id") for r in rules]
         self.assertEqual(len(rules), 8, f"应解析出 8 条网络规则，实际 {len(rules)}：{ids}")
@@ -314,7 +314,7 @@ class TestHostRules(unittest.TestCase):
         try:
             from hornwork.engines.hostrules import HostRuleEngine  # noqa: PLC0415
         except Exception as exc:  # noqa: BLE001
-            raise unittest.SkipTest(f"HostRuleEngine 不可用：{exc}")
+            raise unittest.SkipTest(f"HostRuleEngine 不可用：{exc}") from exc
         cfg = {
             "general": {"rule_dir": str(RULES)},
             "engines": {"host_rule_dir": str(RULES / "host")},
@@ -323,7 +323,7 @@ class TestHostRules(unittest.TestCase):
             engine = HostRuleEngine(cfg, None)
             result = engine.reload()
         except Exception as exc:  # noqa: BLE001
-            raise unittest.SkipTest(f"HostRuleEngine 接口尚不可用（{exc}）")
+            raise unittest.SkipTest(f"HostRuleEngine 接口尚不可用（{exc}）") from exc
         self.assertTrue(result.get("ok"), f"主机规则加载失败：{result.get('errors')}")
         self.assertEqual(result.get("rules"), 8)
 
@@ -520,7 +520,9 @@ class TestPlaybook(unittest.TestCase):
                 self.assertIn(step["mode"], {"observe", "dry-run", "enforce"})
         rollback = pb.get("rollback") or []
         for item in rollback:
-            self.assertIn(item.get("action"), PLAYBOOK_ACTIONS)
+            undo_of = item.get("undo_of")
+            self.assertIsNotNone(undo_of, "rollback 必须用 undo_of 引用步骤")
+            self.assertIn(undo_of, step_ids, "rollback.undo_of 引用了不存在的步骤")
         actions = {step["action"] for step in steps}
         self.assertIn("quarantine_file", actions)
         self.assertIn("collect_forensics", actions)

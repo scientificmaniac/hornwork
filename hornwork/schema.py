@@ -60,7 +60,10 @@ def to_utc(ts: Any) -> str:
         except ValueError:
             return utc_now()
     if isinstance(ts, (int, float)):
-        return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        try:
+            return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        except (ValueError, OverflowError, OSError):
+            return utc_now()
     if isinstance(ts, datetime):
         dt = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"

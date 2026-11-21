@@ -63,6 +63,8 @@ class KeyRing:
     def __init__(self, master: bytes, pepper: bytes, key_id: int = 1):
         if len(master) < KEY_LEN:
             raise KeyMaterialError("主密钥长度不足")
+        if len(pepper) < KEY_LEN:
+            raise KeyMaterialError("pepper 长度不足")
         self.master = master[:KEY_LEN]
         self.pepper = pepper[:KEY_LEN]
         self.key_id = int(key_id)

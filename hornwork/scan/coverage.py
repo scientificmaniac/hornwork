@@ -352,7 +352,7 @@ def compute(store: Any, snapshot_id: str, cfg: dict | None = None) -> dict:
         numerator += asset_num
         denominator += asset_den
 
-    for code, bucket in by_domain.items():
+    for bucket in by_domain.values():
         applicable = int(bucket["applicable"])
         bucket["avg"] = round(bucket["avg"] / applicable, 4) if applicable else 0.0
 

@@ -460,7 +460,7 @@ class TestActionExecutor(TempCase):
             self.assertEqual(len(rows), 4)
             self.assertEqual(rows[0]["prev_hash"], "")
             self.assertTrue(rows[0]["hash"])
-            for prev, cur in zip(rows, rows[1:]):
+            for prev, cur in zip(rows, rows[1:], strict=False):  # 相邻配对，长度天然差 1
                 self.assertEqual(cur["prev_hash"], prev["hash"])
             self.assertEqual(verify_chain(rows), (True, None))
 
@@ -604,6 +604,60 @@ class TestPlaybook(TempCase):
             self.assertIn(PUBLIC_IP, result["steps"][0]["detail"])
             self.assertEqual(cases.get(case_id)["status"], "investigating")
             self.assertEqual(verify_chain(store.audit_rows()), (True, None))
+        finally:
+            store.close()
+
+    def test_runner_rollback_on_benign(self) -> None:
+        """rollback 在新 schema 下按 verdict 条件执行 undo（dry-run 演练）。"""
+        store = self.store()
+        try:
+            cases = CaseManager(store, self.cfg)
+            case = cases.create("回滚测试工单", severity="P2")
+            case_id = case["case_id"]
+            cases.set_verdict(case_id, "benign")
+            executor = ActionExecutor(store, self.cfg)
+            runner = PlaybookRunner(store, executor)
+            pb = {
+                "id": "PB-RB",
+                "name": "回滚测试",
+                "steps": [
+                    {"id": "s1", "action": "block_ip", "mode": "enforce",
+                     "params": {"ip": PUBLIC_IP}},
+                ],
+                "rollback": [{"undo_of": "s1", "when": "verdict == benign"}],
+            }
+            result = runner.run(case_id, pb, mode="dry-run")
+            self.assertTrue(result["ok"], msg=result)
+            self.assertEqual(len(result["rollbacks"]), 1)
+            self.assertEqual(result["rollbacks"][0]["undo_of"], "s1")
+            self.assertTrue(result["rollbacks"][0]["ok"])
+            # verdict 不匹配时不应回滚
+            cases.set_verdict(case_id, "tp")
+            result2 = runner.run(case_id, pb, mode="dry-run")
+            self.assertEqual(result2["rollbacks"], [])
+        finally:
+            store.close()
+
+    def test_runner_rollback_legacy_action(self) -> None:
+        """旧式 rollback.action 仍兼容：映射到同类步骤的凭据。"""
+        store = self.store()
+        try:
+            case = CaseManager(store, self.cfg).create("旧式回滚工单", severity="P3")
+            case_id = case["case_id"]
+            CaseManager(store, self.cfg).set_verdict(case_id, "benign")
+            runner = PlaybookRunner(store, ActionExecutor(store, self.cfg))
+            pb = {
+                "id": "PB-RB-LEGACY",
+                "name": "旧式回滚",
+                "steps": [
+                    {"id": "s1", "action": "block_ip", "mode": "enforce",
+                     "params": {"ip": PUBLIC_IP}},
+                ],
+                "rollback": [{"action": "unblock_ip", "when": "verdict == benign"}],
+            }
+            result = runner.run(case_id, pb, mode="dry-run")
+            self.assertEqual(len(result["rollbacks"]), 1)
+            self.assertTrue(result["rollbacks"][0]["ok"])
         finally:
             store.close()
 

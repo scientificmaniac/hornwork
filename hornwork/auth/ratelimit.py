@@ -32,12 +32,27 @@ def _since(window_sec: int, now: float | None = None) -> str:
 class RateLimiter:
     """进程内滑动窗口计数（多实例场景需外部存储，单机足够）。"""
 
+    # 桶数量上限：防止伪造 key 无限建桶耗尽内存。
+    MAX_BUCKETS = 10000
+
     def __init__(self) -> None:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
+
+    def _prune(self, ts: float, window: float) -> None:
+        """清理已完全过期的桶，保持内存有界。"""
+        if len(self._hits) <= self.MAX_BUCKETS:
+            return
+        cutoff = ts - window
+        for name, bucket in list(self._hits.items()):
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+            if not bucket:
+                self._hits.pop(name, None)
 
     def allow(self, scope: str, key: str, limit: int, window: float,
               now: float | None = None) -> bool:
         ts = time.time() if now is None else float(now)
+        self._prune(ts, window)
         bucket = self._hits[f"{scope}:{key}"]
         while bucket and bucket[0] <= ts - window:
             bucket.popleft()
@@ -49,6 +64,7 @@ class RateLimiter:
     def count(self, scope: str, key: str, window: float,
               now: float | None = None) -> int:
         ts = time.time() if now is None else float(now)
+        self._prune(ts, window)
         bucket = self._hits[f"{scope}:{key}"]
         while bucket and bucket[0] <= ts - window:
             bucket.popleft()

@@ -20,14 +20,12 @@ import signal
 import sys
 import threading
 import time
-import traceback
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from . import __version__, schema
 from .bus import Bus
-from .client import CtlClient
 from .config import cfg_get, ensure_dirs, load_config, rule_dir
 from .ctl import CtlError, CtlServer
 from .engines.cascade import Cascade
@@ -79,7 +77,7 @@ class HornworkDaemon:
             thread_name_prefix="scan",
         )
         self._pending_scans: set[str] = set()
-        self._scan_lock = __import__("threading").Lock()
+        self._scan_lock = threading.Lock()
         self._ready = False
         self._build_components()
         self.log.info(
@@ -614,7 +612,12 @@ class HornworkDaemon:
 
     def _h_export(self, p: dict) -> dict:
         fmt = str(p.get("format") or "jsonl")
-        out_dir = Path(str(p.get("out") or cfg_get(self.cfg, "general.raw_dir", "./raw")))
+        base_dir = Path(str(cfg_get(self.cfg, "general.raw_dir", "./raw"))).resolve()
+        requested = Path(str(p.get("out") or base_dir)).expanduser()
+        out_dir = requested.resolve()
+        # 控制面请求不得越出配置的 raw_dir，避免任意路径写入。
+        if out_dir != base_dir and base_dir not in out_dir.parents:
+            raise CtlError("bad_params", f"导出路径越界：{requested}")
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         alerts = self.store.query_alerts(limit=int(p.get("limit", 1000)))
@@ -671,7 +674,10 @@ class HornworkDaemon:
             except Exception as exc:  # noqa: BLE001
                 self.log.error("Web 控制台启动失败", error=str(exc))
                 self.web = None
-        self.ctl.start()
+        try:
+            self.ctl.start()
+        except Exception as exc:  # noqa: BLE001 - 与 web 一致，控制面失败不应终止守护进程
+            self.log.error("控制面启动失败", error=str(exc))
         loop.run_in_executor(None, self._background_init)
 
         for sig in (signal.SIGTERM, signal.SIGINT):

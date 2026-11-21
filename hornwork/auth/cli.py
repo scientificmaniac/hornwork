@@ -15,29 +15,30 @@ import sys
 from typing import Any
 
 from .. import __version__
+from ..cli_common.output import print_json, print_table
 from . import audit, biometric, crypto, db, password, risk, session, totp
+
+# 认证模块的两处历史差异，用参数保留而不是"顺手统一"——它们都是对外可见的格式：
+# 1. 列宽上限是 48（其余子命令是 60）；
+# 2. 单元格一律 `str(value or "")`，不做 dict/list 的 JSON 渲染。
+#    审计表的 detail 列原本就是这样打印的，改成 JSON 会改变输出。
+_AUTH_MAX_COL_WIDTH = 48
 
 
 # ---------------------------------------------------------------------------
 # 输出工具
 # ---------------------------------------------------------------------------
 def _json(obj: Any) -> None:
-    print(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
+    print_json(obj)
 
 
 def _table(rows: list[dict], columns: list[tuple[str, str]]) -> None:
-    if not rows:
-        print("（无数据）")
-        return
-    widths = {k: len(t) for k, t in columns}
-    for row in rows:
-        for k, _t in columns:
-            widths[k] = max(widths[k], min(len(str(row.get(k, "") or "")), 48))
-    print("  ".join(t.ljust(widths[k]) for k, t in columns))
-    print("  ".join("-" * widths[k] for k, _t in columns))
-    for row in rows:
-        print("  ".join(str(row.get(k, "") or "")[: widths[k]].ljust(widths[k])
-                        for k, _t in columns))
+    print_table(
+        rows,
+        columns,
+        max_col_width=_AUTH_MAX_COL_WIDTH,
+        render=lambda value: str(value or ""),
+    )
 
 
 def _read_secret(prompt: str, stdin_flag: bool = False) -> str:
@@ -49,7 +50,7 @@ def _read_secret(prompt: str, stdin_flag: bool = False) -> str:
 
 
 def _engine(args):
-    from ..config import load_config, cfg_get
+    from ..config import load_config
     from .engine import AuthEngine
 
     cfg = load_config(args.config)
@@ -59,7 +60,7 @@ def _engine(args):
         print(f"[!] {exc}", file=sys.stderr)
         print("[i] 先在测试主机执行：sudo bash scripts/setup_auth.sh"
               "（或 hornworkctl auth db init 生成密钥）", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from exc
 
 
 def _embedding(args) -> list[float] | None:

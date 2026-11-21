@@ -10,13 +10,16 @@
         {"id": "s2", "action": "collect_forensics", "mode": "observe"},
         {"id": "s3", "action": "update_case", "params": {"status": "investigating"}}
       ],
-      "rollback": [{"action": "restore_file", "when": "verdict == benign"}]
+      "rollback": [{"undo_of": "s1", "when": "verdict == benign"}]
     }
 
 约束：
 - 步骤 ``action`` ∈ 6 类处置动作 ∪ ``open_case/update_case/close_case/notify``；
 - 步骤 ``mode`` 会被调用方 run(mode=...) 向下封顶（observe 模式下不会真执行 enforce 步骤）；
 - 失败即停：任意步骤失败后不再执行后续步骤，结果里保留已完成步骤明细；
+- ``rollback`` 在 run() 末尾按条件执行：``undo_of`` 引用已执行步骤产生的回滚凭据，
+  交给 ``ActionExecutor.undo()``；``when`` 仅支持 ``key == value`` 形式（key 取上下文或工单字段）；
+- 旧形式 ``{"action": "unblock_ip"}`` 仍兼容：按动作名映射到同类步骤的回滚凭据；
 - 内置 :data:`DEFAULT_PLAYBOOKS` 供 CLI ``hornworkctl playbook run`` 使用。
 """
 
@@ -51,6 +54,14 @@ CASE_VERDICTS: tuple[str, ...] = ("tp", "fp", "benign", "unknown")
 SEVERITIES: tuple[str, ...] = ("P1", "P2", "P3")
 
 _MODE_ORDER = {"observe": 0, "dry-run": 1, "enforce": 2}
+
+#: 旧式 rollback.action → 产生可回滚凭据的步骤动作（向后兼容）
+LEGACY_ROLLBACK_ACTIONS: dict[str, str] = {
+    "restore_file": "quarantine_file",
+    "unblock_ip": "block_ip",
+    "enable_account": "disable_account",
+    "unisolate_host": "isolate_host",
+}
 
 
 def _capped_mode(requested: str | None, cap: str | None) -> str:
@@ -144,12 +155,19 @@ def validate_playbook(pb: dict[str, Any]) -> list[str]:
         if not isinstance(rollback, list):
             errs.append("playbook.rollback 必须是数组")
         else:
+            step_ids = {str(s.get("id") or "") for s in steps if isinstance(s, dict)}
             for index, item in enumerate(rollback):
                 if not isinstance(item, dict):
                     errs.append(f"rollback[{index}] 必须是对象")
                     continue
-                if not str(item.get("action") or "").strip():
-                    errs.append(f"rollback[{index}] 缺少 action")
+                undo_of = str(item.get("undo_of") or "").strip()
+                action = str(item.get("action") or "").strip()
+                if not undo_of and not action:
+                    errs.append(f"rollback[{index}] 缺少 undo_of 或 action")
+                if undo_of and undo_of not in step_ids:
+                    errs.append(f"rollback[{index}].undo_of 引用了不存在的步骤: {undo_of}")
+                if action and action not in LEGACY_ROLLBACK_ACTIONS:
+                    errs.append(f"rollback[{index}].action 不是合法的回滚动作: {action!r}")
                 when = item.get("when")
                 if when is not None and not isinstance(when, str):
                     errs.append(f"rollback[{index}].when 必须是字符串表达式")
@@ -215,6 +233,7 @@ class PlaybookRunner:
                 ctx[key] = val
         ctx.setdefault("case_id", case_id)
         results: list[dict[str, Any]] = []
+        credentials: dict[str, dict[str, Any]] = {}  # step_id → 回滚凭据
         ok = True
         for step in pb.get("steps") or []:
             step_mode = _capped_mode(step.get("mode"), run_mode)
@@ -223,6 +242,9 @@ class PlaybookRunner:
             step_result = self._execute_step(
                 case_id, action, params, step_mode, timeout=step.get("timeout")
             )
+            credential = dict(step_result.get("rollback") or {})
+            if credential:
+                credentials[str(step.get("id"))] = credential
             results.append(
                 {
                     "id": str(step.get("id")),
@@ -239,16 +261,78 @@ class PlaybookRunner:
                     playbook=pb_id, case_id=case_id, step=step.get("id"), action=action,
                 )
                 break
+        # 满足条件时按 rollback 声明回滚已执行步骤（用执行时产生的凭据）。
+        rollbacks = self._run_rollbacks(case_id, pb.get("rollback"), credentials, ctx, run_mode)
         result = {
             "case_id": case_id,
             "playbook": pb_id,
             "mode": run_mode,
             "steps": results,
             "ok": ok,
+            "rollbacks": rollbacks,
         }
         log.info("playbook 执行结束", playbook=pb_id, case_id=case_id, ok=ok,
                  steps=len(results), mode=run_mode)
         return result
+
+    # ------------------------------------------------------------------ 回滚
+    def _rollback_due(self, when: str | None, case_id: str, ctx: dict[str, Any]) -> bool:
+        """判定 rollback.when：仅支持 ``key == value``，key 取上下文或工单字段。"""
+        if not when:
+            return True
+        text = str(when).strip()
+        if "==" not in text:
+            log.warn("rollback.when 语法不支持，按不触发处理", when=text)
+            return False
+        key, expected = (part.strip().strip("'\"") for part in text.split("==", 1))
+        actual: Any = ctx.get(key)
+        if actual is None:
+            case = self.cases.get(case_id)
+            actual = (case or {}).get(key)
+        return str(actual) == str(expected)
+
+    def _run_rollbacks(
+        self,
+        case_id: str,
+        rollback: Any,
+        credentials: dict[str, dict[str, Any]],
+        ctx: dict[str, Any],
+        mode: str,
+    ) -> list[dict[str, Any]]:
+        """按声明执行回滚；只回滚有凭据且条件命中的步骤。"""
+        if not isinstance(rollback, list) or not credentials or self.actions is None:
+            return []
+        step_actions: dict[str, str] = {}
+        # legacy action → 同类步骤 id（取第一个匹配的）
+        for sid, cred in credentials.items():
+            step_actions[sid] = str(cred.get("kind") or "")
+        executed: list[dict[str, Any]] = []
+        for item in rollback:
+            if not isinstance(item, dict):
+                continue
+            if not self._rollback_due(item.get("when"), case_id, ctx):
+                continue
+            undo_of = str(item.get("undo_of") or "").strip()
+            if not undo_of:
+                legacy = str(item.get("action") or "").strip()
+                target_kind = LEGACY_ROLLBACK_ACTIONS.get(legacy, "")
+                undo_of = next(
+                    (sid for sid, kind in step_actions.items() if kind == target_kind), ""
+                )
+            cred = credentials.get(undo_of)
+            if not cred:
+                log.warn("rollback 跳过：步骤无回滚凭据", step=undo_of, case_id=case_id)
+                continue
+            try:
+                result = self.actions.undo(cred, mode=mode)
+            except Exception as exc:  # noqa: BLE001 - 单条回滚失败不影响其他条目
+                log.warn("rollback 执行失败", step=undo_of, error=str(exc), case_id=case_id)
+                result = {"ok": False, "detail": str(exc)}
+            executed.append(
+                {"undo_of": undo_of, "ok": bool(result.get("ok")),
+                 "detail": str(result.get("detail") or "")}
+            )
+        return executed
 
     # ------------------------------------------------------------------ 上下文
     def _auto_context(self, case_id: str) -> dict[str, Any]:
@@ -400,7 +484,7 @@ DEFAULT_PLAYBOOKS: dict[str, dict[str, Any]] = {
              "params": {"paths": ["${path}"]}},
             {"id": "s3", "action": "update_case", "params": {"status": "investigating"}},
         ],
-        "rollback": [{"action": "restore_file", "when": "verdict == benign"}],
+        "rollback": [{"undo_of": "s1", "when": "verdict == benign"}],
     },
     "PB-002": {
         "id": "PB-002",
@@ -412,7 +496,7 @@ DEFAULT_PLAYBOOKS: dict[str, dict[str, Any]] = {
             {"id": "s2", "action": "collect_forensics", "mode": "observe"},
             {"id": "s3", "action": "update_case", "params": {"status": "contained"}},
         ],
-        "rollback": [{"action": "unblock_ip", "when": "verdict == benign"}],
+        "rollback": [{"undo_of": "s1", "when": "verdict == benign"}],
     },
     "PB-003": {
         "id": "PB-003",
@@ -425,7 +509,7 @@ DEFAULT_PLAYBOOKS: dict[str, dict[str, Any]] = {
              "params": {"user": "${user}"}},
             {"id": "s3", "action": "update_case", "params": {"status": "investigating"}},
         ],
-        "rollback": [{"action": "enable_account", "when": "verdict == fp"}],
+        "rollback": [{"undo_of": "s2", "when": "verdict == fp"}],
     },
     "PB-004": {
         "id": "PB-004",
@@ -436,7 +520,7 @@ DEFAULT_PLAYBOOKS: dict[str, dict[str, Any]] = {
             {"id": "s2", "action": "collect_forensics", "mode": "observe"},
             {"id": "s3", "action": "update_case", "params": {"status": "contained"}},
         ],
-        "rollback": [{"action": "unisolate_host", "when": "verdict == benign"}],
+        "rollback": [{"undo_of": "s1", "when": "verdict == benign"}],
     },
     "PB-005": {
         "id": "PB-005",

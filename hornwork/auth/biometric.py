@@ -89,7 +89,7 @@ def l2_normalize(vec: Sequence[float]) -> list[float]:
 
 def cosine(a: Sequence[float], b: Sequence[float]) -> float:
     """两者都 L2 归一化后，点积即余弦相似度。"""
-    return sum(float(x) * float(y) for x, y in zip(a, b))
+    return sum(float(x) * float(y) for x, y in zip(a, b, strict=True))
 
 
 # ---------------------------------------------------------------------------
@@ -165,13 +165,18 @@ def verify(store, keyring: crypto.KeyRing, user_id: int, embedding: Sequence[flo
         return False, 0.0, "dim_mismatch"
     live = transform(l2_normalize(emb), template_seed(keyring, user_id))
     best = -1.0
+    decryptable = 0
     for row in rows:
         try:
             stored = decrypt_template(keyring, user_id, row)
-        except Exception:  # noqa: BLE001 - AAD/tag 不符 = 数据被篡改，记审计但不放行
+        except Exception:  # noqa: BLE001 - AAD/tag 不符 = 数据被篡改，不放行
             continue
+        decryptable += 1
         sim = cosine(stored, live)
         best = max(best, sim)
+    if decryptable == 0:
+        # 全部模板无法解密（密钥错误或数据被篡改），不要伪装成"相似度不足"。
+        return False, 0.0, "template_undecryptable"
     threshold = float(policy.get("threshold", 0.35))
     return best >= threshold, round(best, 4), "ok" if best >= threshold else "below_threshold"
 

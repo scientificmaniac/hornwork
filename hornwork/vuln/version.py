@@ -131,7 +131,8 @@ def _compare_prerelease(a: str, b: str) -> int:
     if not b:
         return -1
     parts_a, parts_b = a.split("."), b.split(".")
-    for left, right in zip(parts_a, parts_b):
+    # 长度差异在循环后单独比较，这里按较短者截断（strict=False）。
+    for left, right in zip(parts_a, parts_b, strict=False):
         if left == right:
             continue
         left_num, right_num = left.isdigit(), right.isdigit()

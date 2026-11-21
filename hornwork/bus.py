@@ -47,7 +47,6 @@ class Bus:
             pending, self._pending = self._pending, []
             for topic, item in pending:
                 self._dispatch(topic, item)
-            self._pending = []
         self._log_flush()
 
     def _log_flush(self) -> None:

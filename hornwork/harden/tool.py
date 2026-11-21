@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     p_probe.add_argument("--ciphers", action="store_true")
     p_probe.add_argument("--hsts", action="store_true")
 
-    p_cert = sub.add_parser("cert-check")
+    sub.add_parser("cert-check")
 
     p_luks = sub.add_parser("luks")
     p_luks.add_argument("--check", action="store_true")

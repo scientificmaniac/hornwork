@@ -420,7 +420,6 @@ class _Handler(BaseHTTPRequestHandler):
         import os
         import socket
         import ssl
-        from pathlib import Path
 
         sec: dict[str, Any] = {"ts": _iso_now(), "https": {}, "lockout": {}, "paths": {},
                                "service": {}}

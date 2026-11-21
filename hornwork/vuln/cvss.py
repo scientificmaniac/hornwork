@@ -191,7 +191,10 @@ def calculate(vector: str | dict) -> float:
 
 
 def severity(score: float) -> str:
-    """分值 → 中文等级：0 / 0.1-3.9 低 / 4.0-6.9 中 / 7.0-8.9 高 / 9.0-10.0 严重。"""
+    """分值 → 中文等级：0 / 0.1-3.9 低 / 4.0-6.9 中 / 7.0-8.9 高 / 9.0-10.0 严重。
+
+    这是全项目**唯一**的 CVSS 分值分档实现；需要容错语义时用 :func:`severity_safe`。
+    """
     value = float(score)
     if value <= 0:
         return "无"
@@ -202,3 +205,18 @@ def severity(score: float) -> str:
     if value < 9.0:
         return "高"
     return "严重"
+
+
+def severity_safe(score: Any) -> str:
+    """容错版分档：非法值 / 越界值返回空串，合法值时完全委托 :func:`severity`。
+
+    供 NVD 导入与 CVE 匹配等"脏数据不得污染等级"的场景使用：
+    返回 ``""`` 而非 ``"无"``，以便调用方用 ``a or b`` 串联兜底。
+    """
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return ""
+    if not 0.0 <= value <= 10.0:
+        return ""
+    return severity(value)

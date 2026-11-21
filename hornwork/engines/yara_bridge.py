@@ -24,6 +24,7 @@ except Exception:  # ImportError/OSError（缺 libyara）
 
 from ..config import cfg_get
 from ..log import get_logger
+from ._rule_dir import resolve_rule_dir
 from .base import BaseScanEngine, make_hit
 
 log = get_logger("engines.yara")
@@ -54,15 +55,6 @@ def _severity_score(value: Any, default: int = 60) -> int:
     return max(0, min(100, score))
 
 
-def _resolve_rule_dir(cfg: dict) -> Path:
-    """定位 YARA 规则目录：配置目录存在则用它，否则回退到 `<general.rule_dir>/yara`。"""
-    configured = cfg_get(cfg, "engines.yara_rule_dir", "")
-    if configured and Path(str(configured)).is_dir():
-        return Path(str(configured))
-    base = Path(str(cfg_get(cfg, "general.rule_dir", "/opt/hornwork/rules")))
-    return base / "yara"
-
-
 class YaraEngine(BaseScanEngine):
     """YARA 扫描引擎（进程内常驻编译结果）。"""
 
@@ -72,7 +64,7 @@ class YaraEngine(BaseScanEngine):
 
     def __init__(self, cfg: dict):
         self.cfg = dict(cfg or {})
-        self.rule_dir = _resolve_rule_dir(self.cfg)
+        self.rule_dir = resolve_rule_dir(self.cfg, "yara", "engines.yara_rule_dir")
         max_size_mb = int(cfg_get(self.cfg, "engines.max_size_mb", 100) or 100)
         self.max_size = max(1, max_size_mb) * 1024 * 1024
         timeout_ms = int(cfg_get(self.cfg, "engines.timeout_ms.yara", DEFAULT_TIMEOUT_MS)

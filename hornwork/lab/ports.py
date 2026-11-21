@@ -51,8 +51,9 @@ def _parse(spec: Any) -> tuple[str | None, int, int, str] | None:
     - 带协议："8000:80/udp"；
     - 长语法：{"target": 80, "published": 8080, "host_ip": "127.0.0.1",
                "protocol": "tcp"}；
-    - 裸整数（compose 只声明容器端口）与 PyYAML 1.1 六十进制陷阱
-      （未加引号的 "23:23" 会被解析成整数 1403，这里尽量还原）。
+    - 裸整数（compose 只声明容器端口）。PyYAML 1.1 会把未加引号的
+      "h:c" 误解析成六十进制整数，该映射无法可靠反推，超过 65535
+      的整数一律拒绝（请给端口加引号）。
 
     说明：compose 短语法里裸端口只声明容器端口、宿主端口由 Docker 随机分配。
     本层需要一份"可规划"的宿主端口，因此约定裸端口 host=container。
@@ -61,14 +62,12 @@ def _parse(spec: Any) -> tuple[str | None, int, int, str] | None:
     if spec is None or isinstance(spec, bool):
         return None
 
-    # 裸整数：单个端口，或 PyYAML 六十进制还原
+    # 裸整数：只接受合法端口。PyYAML 会把未加引号的 "h:c" 误解析成
+    # 六十进制整数（如 "22:80"→1400），该映射无法可靠反推，
+    # 因此超过 65535 的值一律拒绝，提示用户给端口加引号。
     if isinstance(spec, int):
         if 1 <= spec <= 65535:
             return None, spec, spec, "tcp"
-        hi, lo = divmod(spec, 60)
-        if 1 <= hi <= 65535 and 0 <= lo <= 59:
-            # "23:23" → 1403，还原为 host=23 / container=23
-            return None, hi, lo, "tcp"
         return None
 
     # 长语法

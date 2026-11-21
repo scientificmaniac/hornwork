@@ -33,6 +33,7 @@ except Exception:
 
 from ..config import cfg_get
 from ..log import get_logger
+from ._rule_dir import resolve_rule_dir
 from .base import BaseEventEngine, make_hit
 
 log = get_logger("engines.sigma")
@@ -357,15 +358,6 @@ def _extract_mitre(tags: Iterable[Any]) -> list[str]:
     return techniques
 
 
-def _resolve_rule_dir(cfg: dict, kind: str, dotted: str) -> Path:
-    """定位规则目录：配置目录存在则用它，否则回退到 `<general.rule_dir>/<kind>`。"""
-    configured = cfg_get(cfg, dotted, "")
-    if configured and Path(str(configured)).is_dir():
-        return Path(str(configured))
-    base = Path(str(cfg_get(cfg, "general.rule_dir", "/opt/hornwork/rules")))
-    return base / kind
-
-
 class SigmaMatcher(BaseEventEngine):
     """Sigma 子集事件匹配器。"""
 
@@ -375,7 +367,7 @@ class SigmaMatcher(BaseEventEngine):
     def __init__(self, cfg: dict, store: Any = None):
         self.cfg = dict(cfg or {})
         self.store = store
-        self.rule_dir = _resolve_rule_dir(self.cfg, "sigma", "engines.sigma_rule_dir")
+        self.rule_dir = resolve_rule_dir(self.cfg, "sigma", "engines.sigma_rule_dir")
         #  要求 status=test/deprecated 跳过；部署时可用该开关放开 test
         self.include_test = bool(cfg_get(self.cfg, "engines.sigma.include_status_test", False))
         self._lock = threading.Lock()

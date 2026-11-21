@@ -5,7 +5,10 @@
 - 单步失败就地还原该步备份，不污染其它项（失败隔离）；
 - 每项执行前备份 targets，回滚粒度是 run（按 run 逆序撤销）；
 - high 风险项未带 --yes-risk 只标 skipped_unconfirmed，不静默执行；
-- 带 guard_seconds 的项由 systemd-run 定时器做“改坏了自动退回”的安全垫。
+- 带 guard_seconds 的项由 systemd-run 定时器做“改坏了自动退回”的安全垫；
+- run 状态语义：succeeded（全部完成）/ partially_completed（部分完成+部分未执行）
+  / not_executed（适用项全部未执行）/ partially_failed（存在失败，优先级最高）；
+  仅 succeeded / running 的退出码为 0，其余均非 0，避免"什么都没加固"被误判为成功。
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import core, items as items_mod, plan as plan_mod
+from . import core, items as items_mod
 
 TERMINAL_OK = {"verified", "already_ok"}
 FAILED = {"failed", "verify_failed"}
@@ -192,14 +195,9 @@ def apply_plan(
         save_run(run, cfg)
         core.emit_event(cfg, "verify", {"run_id": run["run_id"], "item": item.id, "status": result["status"]})
 
-    for result in run["results"]:
-        if result["status"] in FAILED:
-            run["status"] = "partially_failed"
-            break
-    else:
-        run["status"] = "succeeded"
-    run["finished_at"] = core.utc_now()
     run["counts"] = counts(run)
+    run["status"] = classify_status(run)
+    run["finished_at"] = core.utc_now()
     save_run(run, cfg)
     return run
 
@@ -281,6 +279,25 @@ def counts(run: dict[str, Any]) -> dict[str, int]:
         result[entry["status"]] = result.get(entry["status"], 0) + 1
     result["total"] = len(run.get("results", []))
     return result
+
+
+def classify_status(run: dict[str, Any]) -> str:
+    """按结果计数判定 run 状态（纯函数，便于单测）。
+
+    优先级：partially_failed > not_executed > partially_completed > succeeded。
+    ``would_apply``（check/dry-run 演练）不算未执行，保持 succeeded 语义。
+    """
+    c = run.get("counts") or counts(run)
+    failed = c.get("failed", 0) + c.get("verify_failed", 0)
+    incomplete = c.get("skipped_unconfirmed", 0) + c.get("manual", 0)
+    total = c.get("total", 0)
+    if failed:
+        return "partially_failed"
+    if total and incomplete == total:
+        return "not_executed"
+    if incomplete:
+        return "partially_completed"
+    return "succeeded"
 
 
 def completion_rate(run: dict[str, Any]) -> float:

@@ -18,7 +18,6 @@ from hornwork.scan import (
     coverage,
     diff,
     normalize,
-    report,
     runner,
     scheduler,
     store as sscan,
@@ -230,7 +229,7 @@ class ScanFlowTest(unittest.TestCase):
 
     def test_lifecycle_fixed_after_two_misses(self):
         r = runner.ScanRunner(self.cfg, self.store, adapters=[self.adapter])
-        first = r.run_plan("p-manual", slot="L1")
+        r.run_plan("p-manual", slot="L1")
         config_finding = [f for f in sscan.list_findings(self.store) if f["kind"] == "config"][0]
         self.assertEqual(config_finding["status"], "new")
         # 第二次：配置项消失（其余仍在）

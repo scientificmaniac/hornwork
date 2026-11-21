@@ -9,6 +9,6 @@
     {"id": "s3", "action": "open_case", "params": {"severity": "P2"}}
   ],
   "rollback": [
-    {"action": "restore_file", "when": "verdict == benign"}
+    {"undo_of": "s1", "when": "verdict == benign"}
   ]
 }

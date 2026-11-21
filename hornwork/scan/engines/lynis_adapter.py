@@ -18,7 +18,6 @@ from pathlib import Path
 from ...log import get_logger
 from .base import (
     ScanContext,
-    asset_is_self,
     binary_available,
     cfg_get_default,
     clip_timeout,

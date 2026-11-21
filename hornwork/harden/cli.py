@@ -165,7 +165,6 @@ def cmd_apply(args: argparse.Namespace, cfg: dict | None) -> int:
         cfg=cfg,
     )
     if args.json:
-        _print_json(run)
         return _print_run(run, True)
     print(f"运行 {run['run_id']}（plan={run['plan_id']}，mode={run['mode']}）")
     skipped = [r for r in run["results"] if r["status"] == "skipped_unconfirmed"]

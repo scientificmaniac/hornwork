@@ -22,10 +22,8 @@
 
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from .. import schema
@@ -188,12 +186,18 @@ class ScanRunner:
         dry_run: bool = False,
         force_window: bool = True,
         write_report: bool = True,
+        check_only: bool = False,
     ) -> dict:
         """不落计划表的一次性扫描（``scan run --profile quick --target ...``）。
 
         实现方式：用内存里的临时计划（``plan_id=adhoc-<ts>``）走同一套编排与闸门，
         避免"手动跑的和定时跑的不是一套代码"。
+
+        ``check_only=True`` 时只做到闸门与目标选择，返回 ``would_scan`` 后立即返回，
+        **不建任务、不建快照、不执行任何引擎** —— 语义与 :meth:`run_plan` 的
+        ``check_only`` 分支完全一致。
         """
+        started = time.time()
         plan = {
             "plan_id": f"adhoc-{_compact_ts()}",
             "name": label or f"临时扫描（{profile_name}）",
@@ -225,6 +229,18 @@ class ScanRunner:
         slot = scheduler.slot_of(plan)
         run_id = sstore.new_id("run")
         snapshot_id = _snapshot_id_for(run_id)
+
+        if check_only:
+            # 与 run_plan 的 check_only 分支保持同一返回结构（少 snapshot_id：
+            # 此处尚未创建快照，返回不存在的 ID 会误导调用方）。
+            return {
+                "ok": True, "plan_id": plan["plan_id"], "run_id": run_id, "slot": slot,
+                "would_scan": [{"asset_id": a.get("asset_id"), "ip": a.get("ip")} for a in assets],
+                "profile": profile.get("name"), "engines": profile.get("engines"),
+                "ports": profile.get("ports"), "gates": gates.get("checks") or [],
+                "duration_ms": int((time.time() - started) * 1000),
+            }
+
         tasks = stask.create_tasks(self.store, plan, assets, run_id, slot,
                                    snapshot_id=snapshot_id)
         sstore.create_snapshot(self.store, {
@@ -489,7 +505,6 @@ class ScanRunner:
             "findings": len(items),
         })
         # 首次全量 / 季度计划自动登记基线
-        snap = sstore.get_snapshot(self.store, snapshot_id)
         prev = sstore.previous_snapshot(self.store, snapshot_id)
         if prev is None or plan.get("kind") == "quarterly":
             sstore.set_base_snapshot(self.store, snapshot_id)

@@ -216,7 +216,7 @@ def strength_hint(password: str) -> int:
     score += 1 if len(password) >= 12 else 0
     score += 1 if len(password) >= 16 else 0
     score += 1 if len(set(password)) >= 8 else 0
-    score += 1 if not password.lower() in {p.lower() for p in WEAK_PASSWORDS} else 0
+    score += 1 if password.lower() not in {p.lower() for p in WEAK_PASSWORDS} else 0
     return min(score, 4)
 
 

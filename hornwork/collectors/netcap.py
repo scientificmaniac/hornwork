@@ -45,9 +45,10 @@ class _SimpleFlow:
         self.flows: dict[tuple, dict] = {}
 
     def key(self, pkt: dict) -> tuple:
-        a = (pkt.get("src_ip"), pkt.get("src_port"))
-        b = (pkt.get("dst_ip"), pkt.get("dst_port"))
-        return (pkt.get("proto"),) + (a + b if a <= b else b + a)
+        # 归一为字符串，避免 ARP 包 src/dst 为 None 时元组比较抛 TypeError。
+        a = (str(pkt.get("src_ip") or ""), int(pkt.get("src_port") or 0))
+        b = (str(pkt.get("dst_ip") or ""), int(pkt.get("dst_port") or 0))
+        return (str(pkt.get("proto") or "ip"),) + (a + b if a <= b else b + a)
 
     def update(self, pkt: dict) -> dict:
         key = self.key(pkt)

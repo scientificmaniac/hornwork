@@ -1,6 +1,6 @@
 """认证审计：只追加的哈希链 + 向检测模块 事件总线/事件表 emit `logon`/`logon_fail`。
 
-设计要点（对应开发思路 §3.3 / §5.2）：
+设计要点：
 - `auth_audit` 独立链，不复用检测模块 的 `action_audit` 链头（避免两个模块抢同一链头）；
 - `row_hash = SHA-256(规范化字段 ‖ prev_hash)`，`prev_hash` 串接，链头存 `meta`；
 - 事件走检测模块 的同一张 `event` 表与 schema 校验器，`source_layer=host`、
@@ -66,9 +66,13 @@ def append(store, *, event: str, result: str, username: str | None = None,
 
 def verify_chain(store, limit: int | None = None) -> dict[str, Any]:
     rows = store.query("SELECT * FROM auth_audit ORDER BY id")
-    if limit:
+    if limit and len(rows) > int(limit):
         rows = rows[-int(limit):]
-    prev = GENESIS
+        # 截取段的起点不是创世块，用该行声明的 prev_hash 作为校验起点，
+        # 否则首行必然与前一块哈希不匹配，导致传 limit 时永远误报断链。
+        prev = str(rows[0]["prev_hash"])
+    else:
+        prev = GENESIS
     checked = 0
     for row in rows:
         fields = {k: row[k] for k in (

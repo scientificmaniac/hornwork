@@ -262,6 +262,9 @@ class Cascade:
                 if str(getattr(engine, "cost", "fast")) == "slow" and not base_ctx["deep"]:
                     continue
                 raw_hits = engine.scan(path_str, base_ctx) or []
+                # 归一化也可能因引擎返回脏数据（如 score=None）抛错，
+                # 必须与 scan 一起放进隔离块，避免单个引擎打断整体扫描。
+                hits = [normalize_hit(hit, name) for hit in raw_hits]
             except Exception as exc:  # 单引擎失败隔离
                 cost_ms = int((time.monotonic() - engine_started) * 1000)
                 engine_costs[name] = cost_ms
@@ -272,7 +275,6 @@ class Cascade:
 
             cost_ms = int((time.monotonic() - engine_started) * 1000)
             engine_costs[name] = cost_ms
-            hits = [normalize_hit(hit, name) for hit in raw_hits]
             used.append(name)
             all_hits.extend(hits)
             max_hit = max((int(hit.get("score") or 0) for hit in hits), default=0)

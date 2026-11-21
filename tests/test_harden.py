@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import tempfile
@@ -207,6 +206,34 @@ class ReportTest(HardenTestBase):
         self.assertEqual(executor.completion_rate(run), 1.0)
         run["results"].append({"item_id": "H-X", "status": "failed"})
         self.assertLess(executor.completion_rate(run), 1.0)
+
+
+class StatusClassificationTest(unittest.TestCase):
+    """run 状态语义：高危项跳过不再被误判为 succeeded。"""
+
+    @staticmethod
+    def _run(*statuses: str) -> dict:
+        return {"results": [{"status": s} for s in statuses]}
+
+    def test_all_done_is_succeeded(self) -> None:
+        run = self._run("verified", "already_ok")
+        self.assertEqual(executor.classify_status(run), "succeeded")
+
+    def test_all_skipped_high_risk_is_not_executed(self) -> None:
+        run = self._run("skipped_unconfirmed", "skipped_unconfirmed")
+        self.assertEqual(executor.classify_status(run), "not_executed")
+
+    def test_partial_completed(self) -> None:
+        run = self._run("verified", "skipped_unconfirmed")
+        self.assertEqual(executor.classify_status(run), "partially_completed")
+
+    def test_failure_takes_priority(self) -> None:
+        run = self._run("failed", "skipped_unconfirmed")
+        self.assertEqual(executor.classify_status(run), "partially_failed")
+
+    def test_dry_run_would_apply_stays_succeeded(self) -> None:
+        run = self._run("would_apply", "would_apply")
+        self.assertEqual(executor.classify_status(run), "succeeded")
 
 
 if __name__ == "__main__":

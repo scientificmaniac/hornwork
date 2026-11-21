@@ -24,8 +24,8 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..config import cfg_get
 from ..log import get_logger
+from ._rule_dir import resolve_rule_dir
 from .base import BaseEventEngine, make_hit
 
 log = get_logger("engines.hostrules")
@@ -245,15 +245,6 @@ def _iter_ops(cond: Any) -> Iterable[str]:
                 yield from _iter_ops(cond[key])
 
 
-def _resolve_rule_dir(cfg: dict, kind: str, dotted: str) -> Path:
-    """定位规则目录：配置目录存在则用它，否则回退到 `<general.rule_dir>/<kind>`。"""
-    configured = cfg_get(cfg, dotted, "")
-    if configured and Path(str(configured)).is_dir():
-        return Path(str(configured))
-    base = Path(str(cfg_get(cfg, "general.rule_dir", "/opt/hornwork/rules")))
-    return base / kind
-
-
 # ---------------------------------------------------------------------------
 # 引擎
 # ---------------------------------------------------------------------------
@@ -266,7 +257,7 @@ class HostRuleEngine(BaseEventEngine):
     def __init__(self, cfg: dict, store: Any = None):
         self.cfg = dict(cfg or {})
         self.store = store
-        self.rule_dir = _resolve_rule_dir(self.cfg, "host", "engines.host_rule_dir")
+        self.rule_dir = resolve_rule_dir(self.cfg, "host", "engines.host_rule_dir")
         self._lock = threading.Lock()
         self._rules: list[dict] = []
         self._errors: list[str] = []

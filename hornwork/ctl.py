@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import socket
-import stat
 import threading
 from pathlib import Path
 from typing import Any, Callable
@@ -18,6 +17,9 @@ from typing import Any, Callable
 from .log import get_logger
 
 Handler = Callable[[dict], Any]
+
+# 单行请求的大小上限，防止客户端只发不换行的数据耗尽内存。
+MAX_REQUEST_BYTES = 1 << 20  # 1 MiB
 
 
 class CtlError(Exception):
@@ -54,6 +56,7 @@ class CtlServer:
         self._thread: threading.Thread | None = None
         self._running = False
         self.stats = {"requests": 0, "errors": 0, "started_at": None}
+        self._stats_lock = threading.Lock()
 
     # ------------------------------------------------------------------ 生命周期
     def start(self) -> None:
@@ -132,6 +135,11 @@ class CtlServer:
                 if not chunk:
                     break
                 buf += chunk
+                if len(buf) > MAX_REQUEST_BYTES:
+                    self.log.warn("ctl 请求过大，已断开", size=len(buf))
+                    with self._stats_lock:
+                        self.stats["errors"] += 1
+                    break
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     if not line.strip():
@@ -146,8 +154,13 @@ class CtlServer:
             except OSError:
                 pass
 
+    def _incr_stat(self, key: str) -> None:
+        """多线程共享 stats，+= 必须加锁，否则并发下会丢计数。"""
+        with self._stats_lock:
+            self.stats[key] += 1
+
     def _handle_line(self, line: bytes) -> dict:
-        self.stats["requests"] += 1
+        self._incr_stat("requests")
         req_id = None
         try:
             req = json.loads(line.decode("utf-8", "replace"))
@@ -160,10 +173,10 @@ class CtlServer:
             result = handler(params)
             return {"id": req_id, "ok": True, "result": result}
         except CtlError as exc:
-            self.stats["errors"] += 1
+            self._incr_stat("errors")
             return {"id": req_id, "ok": False, "error": exc.to_dict()}
         except Exception as exc:  # noqa: BLE001 - 兜底转成 JSON 错误
-            self.stats["errors"] += 1
+            self._incr_stat("errors")
             self.log.error("ctl handler 失败", error=str(exc))
             return {
                 "id": req_id,

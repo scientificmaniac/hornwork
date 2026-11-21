@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 import json
-import os
 import posixpath
 import re
 import time
@@ -27,6 +26,7 @@ from typing import Any
 from .. import schema
 from ..log import get_logger
 from . import BaseCollector
+from ._tail import TailFollower
 
 log = get_logger("collector.auditd")
 
@@ -103,14 +103,18 @@ class AuditdCollector(BaseCollector):
         keys = self.conf("collect.auditd.keys", []) or []
         self.keys = {str(k) for k in keys}
 
-        self._fh: Any = None
-        self._ino: int | None = None
-        self._offset: int = 0
         self._resume_ino: int | None = None
         self._resume_off: int = 0
         self._resume_loaded = False
         self._last_save = 0.0
-        self._last_missing_warn = 0.0
+        self.tail = TailFollower(
+            self.log_path,
+            on_line=self._handle_line,
+            on_stat=self.stat_add,
+            on_error=lambda msg: self.error(msg),
+            start_offset=self._start_offset,
+            label="audit 日志",
+        )
         self._buffer: dict[int, dict] = {}
         self._seen: dict[int, float] = {}
         self._alerts_sent: dict[str, float] = {}
@@ -347,85 +351,27 @@ class AuditdCollector(BaseCollector):
         self._load_resume()
         try:
             while not self.stopping:
-                if self._ensure_open():
+                opened = self.tail.ensure_open()
+                self.stat_set("waiting", 0 if opened else 1)
+                if opened:
                     try:
-                        self._read_available()
+                        self.tail.read_available()
                     except OSError as exc:
                         self.error("读取 audit 日志失败", exc=repr(exc))
-                        self._close()
+                        self.tail.close()
                 self._flush_expired()
                 self._save_resume(force=False)
-                self.sleep(self.poll if self._fh is not None else 1.0)
+                self.sleep(self.poll if self.tail.open else 1.0)
         finally:
             self._flush_expired(force=True)
             self._save_resume(force=True)
-            self._close()
+            self.tail.close()
 
-    def _ensure_open(self) -> bool:
-        """确保日志句柄有效并处理轮转；文件缺失返回 False（1 s 后重试）。"""
-        try:
-            stat = os.stat(self.log_path)
-        except OSError:
-            self._close()
-            self.stat_set("waiting", 1)
-            now = time.time()
-            if now - self._last_missing_warn > 10.0:
-                self._last_missing_warn = now
-                self.error("audit 日志不存在，1s 后重试", path=self.log_path)
-            return False
-
-        if self._fh is not None and self._ino == stat.st_ino:
-            self.stat_set("waiting", 0)
-            return True
-
-        if self._fh is not None and self._ino is not None and self._ino != stat.st_ino:
-            self.stat_add("rotations")
-            log.info("audit 日志轮转", old_inode=self._ino, new_inode=stat.st_ino)
-        self._close()
-        try:
-            handle = open(self.log_path, "r", encoding="utf-8", errors="replace")
-        except OSError as exc:
-            self.error("打开 audit 日志失败", path=self.log_path, exc=repr(exc))
-            return False
-        if self._resume_ino == stat.st_ino and 0 <= self._resume_off <= stat.st_size:
-            start = self._resume_off
-        else:
-            start = stat.st_size  # 首次打开/轮转后从新文件末尾跟
-        try:
-            handle.seek(start)
-        except OSError:
-            start = 0
-        self._fh = handle
-        self._ino = stat.st_ino
-        self._offset = start
-        self.stat_set("waiting", 0)
-        log.info("audit 日志已打开", path=self.log_path, inode=self._ino, offset=start)
-        return True
-
-    def _read_available(self, budget: int = 5000) -> int:
-        """读取当前可读的完整行；返回本次读到的行数。"""
-        handle = self._fh
-        if handle is None:
-            return 0
-        count = 0
-        while count < budget:
-            pos = handle.tell()
-            try:
-                line = handle.readline()
-            except (OSError, UnicodeDecodeError) as exc:
-                self.error("auditd 读取行失败", exc=repr(exc))
-                break
-            if not line:
-                break
-            if not line.endswith("\n"):
-                # 半行：回退，等下一次读
-                handle.seek(pos)
-                break
-            self._offset = handle.tell()
-            count += 1
-            self.stat_add("lines")
-            self._handle_line(line.rstrip("\r\n"))
-        return count
+    def _start_offset(self, st: Any, rotated: bool, previous_ino: int | None) -> int:
+        """起始偏移：命中断点续读则从保存位置，否则从文件末尾跟随。"""
+        if self._resume_ino == st.st_ino and 0 <= self._resume_off <= st.st_size:
+            return self._resume_off
+        return st.st_size
 
     def _handle_line(self, line: str) -> None:
         try:
@@ -529,7 +475,7 @@ class AuditdCollector(BaseCollector):
             log.warn("auditd 断点续读信息无效", exc=repr(exc))
 
     def _save_resume(self, force: bool = False) -> None:
-        if self.store is None or self._ino is None:
+        if self.store is None or self.tail.ino is None:
             return
         now = time.time()
         if not force and now - self._last_save < 5.0:
@@ -537,16 +483,7 @@ class AuditdCollector(BaseCollector):
         self._last_save = now
         try:
             self.store.set_meta(
-                "audit:resume", json.dumps({"inode": self._ino, "offset": self._offset})
+                "audit:resume", json.dumps({"inode": self.tail.ino, "offset": self.tail.offset})
             )
         except Exception as exc:  # noqa: BLE001
             log.warn("auditd 断点续读写入失败", exc=repr(exc))
-
-    def _close(self) -> None:
-        handle, self._fh = self._fh, None
-        if handle is not None:
-            try:
-                handle.close()
-            except OSError:
-                pass
-        self._ino = None

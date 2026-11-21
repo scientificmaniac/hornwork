@@ -150,11 +150,11 @@ def parse_pslist(text: str) -> list[dict]:
         if not fields[0].startswith("0x"):
             continue
 
-        def pick(name: str) -> str:
-            pos = index.get(name)
-            if pos is None or pos >= len(fields):
+        def pick(name: str, cols: dict[str, int] = index, vals: list[str] = fields) -> str:
+            pos = cols.get(name)
+            if pos is None or pos >= len(vals):
                 return ""
-            return fields[pos]
+            return vals[pos]
 
         pid_text = pick("PID")
         if not pid_text.isdigit():
