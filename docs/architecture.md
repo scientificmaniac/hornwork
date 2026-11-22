@@ -320,6 +320,11 @@ CLI 的降级路径（`hornwork/cli.py`）：
 
   实现：标准库 `http.server.ThreadingHTTPServer` + `BaseHTTPRequestHandler`，
   `hornwork/web/server.py`；线程名 `hornwork web`，停止时 3 s 内 join。
+  传输层（`_Handler`）只做解析/鉴权/静态资源/响应发送；业务 handler 按域拆到
+  `hornwork/web/api/` 的 14 个 mixin，由 `_Handler` 多继承装配；公共依赖为
+  `errors.py`（C7/软错误/认证状态机三态）、`context.py`（WebContext/TTL 缓存/
+  认证引擎双检锁）、`routing.py`（启动时构建一次的静态路由表）、`common.py`。
+  GET/HEAD 响应启用 HTTP/1.1 keep-alive，连接设 `TCP_NODELAY`，空闲 30 s 回收。
   绑定与鉴权（`WebServer.start()`）：
     只绑定 `[web].bind`（默认 `127.0.0.1`）；**未配置 token 且 bind 非回环时拒绝启动**；
     token 取 `[web].token` 或环境变量 `[web].token_env`（默认 `HORNWORK_TOKEN`，由
@@ -549,8 +554,8 @@ flowchart TD
   也避免为"单机自托管工具"引入前端构建链与 npm 依赖。
   鉴权逻辑简单可控（静态 Bearer token + 认证子系统的 session），没有 Cookie/CSRF/
   模板注入面。
-  **代价**：路由、参数解析、静态资源、错误处理都要手写（`_Handler` 内约千行）；
-  复杂交互（分页、图表）不如框架省力；页面是原生 JS 单页，不追求组件化。
+  **代价**：路由、参数解析、静态资源、错误处理都要手写（传输层约 380 行，业务 handler 已按域拆到 `web/api/*`）；
+  复杂交互（分页、图表）不如框架省力；前端已迁移到 Vue 3 构建产物，由后端托管 `assets/*`。
 
 ### 9.3 为什么需要审计哈希链
 

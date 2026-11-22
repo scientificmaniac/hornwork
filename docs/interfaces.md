@@ -212,7 +212,7 @@ case_ / action_audit / validation / mem_hits / mem_scan / meta / dlq / sigma_sta
 | `/api/engine-stats` | GET | 引擎贡献统计 |
 | `/api/export` | GET | 导出 JSONL/Markdown |
 
-> 路由全集见 `hornwork/web/server.py`，还包括 `/api/lab/envs`、`/api/vuln/records`、
+> 路由全集见 `hornwork/web/routing.py`（静态路由表），还包括 `/api/lab/envs`、`/api/vuln/records`、
 > `/api/harden/status`、`/api/scan/{overview,plans,tasks,findings,snapshots,diff,coverage,cve,reports}`、
 > `/api/auth/{users,sessions,audit,policy}` 以及 POST `/api/auth/login|step-up|logout`；
 > 静态页为 `GET /` 与 `GET /platform`（`web/static/platform.html`）、`GET /index.html`

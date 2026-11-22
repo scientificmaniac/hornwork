@@ -386,18 +386,31 @@ class EngineLoginTest(AuthTestBase):
 
     def test_session_step_up_and_action_guard(self):
         _user, secret = self.make_user("peter", with_bio=True, embedding=_vec(1.3))
+        # risk.score 的 unusual_time 会在 02:00-06:00 UTC 给首次登录 +10，
+        # 叠加 new_device(+20) 恰好达到 loa3 阈值(30)而要求人脸。CI 常在该
+        # 时段运行导致本用例随机失败。若当前处于该窗口，把时钟前移到 06:01 UTC
+        # （距真实时刻仅数小时，会话不会过期），使 required_loa 稳定为 2。
+        from datetime import datetime, timezone
+
         now = time.time()
-        res = self.eng.login("peter", self.PASSWORD, totp_code=totp.totp(secret, at=now))
+        _hour = datetime.fromtimestamp(now, timezone.utc).hour
+        if _hour in (2, 3, 4, 5):
+            _dt = datetime.fromtimestamp(now, timezone.utc).replace(
+                hour=6, minute=1, second=0, microsecond=0)
+            now = _dt.timestamp()
+        res = self.eng.login("peter", self.PASSWORD, totp_code=totp.totp(secret, at=now),
+                             now=now)
         self.assertEqual(res["status"], "ok", res)
         token = res["token"]
         # LOA2 会话：读允许，写要求 step-up
         self.assertEqual(self.eng.require_action(token, "read")["decision"], "allow")
         self.assertEqual(self.eng.require_action(token, "write")["decision"],
                          "stepup_required")
-        # 缺人脸输入时不消费 TOTP
-        r = self.eng.step_up(token, totp.totp(secret, at=now + 30))
+        # 缺人脸输入时不消费 TOTP（时钟统一走 now，避免与真实时间错配）
+        r = self.eng.step_up(token, totp.totp(secret, at=now + 30), now=now + 30)
         self.assertEqual(r["status"], "bio_required")
-        r = self.eng.step_up(token, totp.totp(secret, at=now + 30), embedding=_vec(1.3))
+        r = self.eng.step_up(token, totp.totp(secret, at=now + 30), now=now + 30,
+                             embedding=_vec(1.3))
         self.assertEqual(r["status"], "ok", r)
         self.assertEqual(self.eng.require_action(token, "write")["decision"], "allow")
         # 登出后旧令牌立即失效

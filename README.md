@@ -318,7 +318,7 @@ hornwork/
 │   ├── vuln/            # 漏洞档案、CVSS 3.1、版本区间匹配
 │   ├── auth/            # Argon2id、TOTP、人脸模板、风险与 LOA、会话
 │   ├── harden/          # 基线、计划、幂等执行与回滚
-│   └── web/             # 标准库 HTTP 单页控制台
+│   └── web/             # HTTP 控制台：server.py 传输层 + routing.py 路由 + api/* 分域 handler
 ├── rules/               # yara/ net/ host/ sigma/ sigdb/ ioc/ playbooks/ scan/ nuclei/
 ├── deploy/              # systemd 单元、auditd 规则、clamd 片段、logrotate
 ├── scripts/             # setup.sh / check.sh / demo.sh

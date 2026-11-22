@@ -6,31 +6,13 @@
 
 from __future__ import annotations
 
-import json
-import os
-import re
-import socket
-import ssl
-import subprocess
 import time
-import uuid
-from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-from ... import __version__, schema
-from ...config import cfg_get
-from ..errors import HttpError as _HttpError, error_payload as _error_payload
+from ..errors import HttpError as _HttpError
 from ..common import (
-    log,
     iso_now as _iso_now,
-    query_dict as _query_dict,
-    q_int as _q_int,
-    NET_RULE_RE as _NET_RULE_RE,
-    YARA_RULE_RE as _YARA_RULE_RE,
 )
-from ...verify.metrics import compute_metrics
 
 
 class ReportMixin:

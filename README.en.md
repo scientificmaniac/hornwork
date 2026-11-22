@@ -318,7 +318,7 @@ hornwork/
 │   ├── vuln/            # vulnerability records, CVSS 3.1, version-range matching
 │   ├── auth/            # Argon2id, TOTP, face templates, risk and LOA, sessions
 │   ├── harden/          # baseline, plans, idempotent apply and rollback
-│   └── web/             # single-page web console on http.server
+│   └── web/             # HTTP console: server.py transport + routing.py + api/* domain handlers
 ├── rules/               # yara/ net/ host/ sigma/ sigdb/ ioc/ playbooks/ scan/ nuclei/
 ├── deploy/              # systemd units, auditd rules, clamd fragment, logrotate
 ├── scripts/             # setup.sh / check.sh / demo.sh

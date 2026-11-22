@@ -52,7 +52,8 @@ Hornwork（棱堡）是**单进程、纯 Linux 的纵深防御平台**：采集�
 后端特征（来自 `docs/architecture.md`）：
 
 - 单进程 `asyncio` 主循环 + 多工作线程；Web 与 daemon **同进程**，Web 直接持有 `Store` 查库，不经控制面 socket。
-- Web 服务为标准库 `ThreadingHTTPServer`（`hornwork/web/server.py`，约 1466 行），默认绑定 `127.0.0.1:8787`。
+- Web 服务为标准库 `ThreadingHTTPServer`（`hornwork/web/server.py`，重构后约 530 行；
+  业务 handler 按域拆到 `hornwork/web/api/`），默认绑定 `127.0.0.1:8787`。
 - 存储为单个 SQLite（WAL），同一库承载核心表 + 扫描子系统 11 张表 + 认证子系统 7 张表。
 - 安全模型：静态 Bearer token + 认证子系统会话（`s1.` 前缀）双入口；无 Cookie / CSRF；错误统一 C7 结构。
 
@@ -321,7 +322,9 @@ frontend/
 | 平台 | `/api/platform/security` | GET | — | `{ts,https,lockout,paths,service,bind}` |
 | 报告 | `/api/report` | GET | `file=<rel>` | 文件内容（HTML→`text/html`，其余 `text/plain`；路径穿越校验） |
 
-> **扫描 8 个 GET 路由是按需挂载**（`server.py` 用 `getattr(self, _attr, None)` 探测 handler 是否存在），handler 缺失时退化为 404；且经 `_scan_api()` 惰性 `init_schema`。前端应容忍这些路由偶发 404/空结构。
+> **扫描 8 个 GET 路由已在 `hornwork/web/routing.py` 静态路由表中显式注册**（重构前用
+> `getattr(self, _attr, None)` 按需挂载、缺失退化为 404；现在路由集合确定），仍经
+> `ScanMixin._scan_api()` 惰性 `init_schema`。前端保留对空结构的容忍即可。
 
 ### 5.2 响应与错误的统一约定
 
@@ -979,7 +982,7 @@ def _dispatch(self, method):
 
 ### C. 本文调研所依据的关键源文件
 
-- `hornwork/web/server.py`（路由表、鉴权、C7、各 handler）
+- `hornwork/web/server.py`（传输层：鉴权、静态资源、响应发送）、`hornwork/web/routing.py`（静态路由表）、`hornwork/web/api/*`（各业务 handler）、`hornwork/web/errors.py`（C7 三态）
 - `hornwork/web/static/index.html`、`hornwork/web/static/platform.html`（现有前端）
 - `hornwork/schema.py`、`hornwork/store.py`（事件/告警/工单/审计模型）
 - `hornwork/engines/`、`hornwork/respond/`、`hornwork/intel/`、`hornwork/verify/`（检测/响应/情报/验证）

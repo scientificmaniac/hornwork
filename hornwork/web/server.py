@@ -18,24 +18,15 @@ from __future__ import annotations
 import hmac
 import json
 import os
-import re
 import socket
-import ssl
-import subprocess
 import threading
 import time
-import uuid
-from collections import Counter
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
-from .. import __version__, schema
-from ..config import cfg_get
-from ..log import get_logger
-from ..verify.metrics import compute_metrics
+from .. import __version__
 from .context import WebContext
 from .errors import HttpError as _HttpError, error_payload as _error_payload
 from .routing import build_routes, lookup as _route_lookup
@@ -59,9 +50,6 @@ from .common import (
     log,
     iso_now as _iso_now,
     query_dict as _query_dict,
-    q_int as _q_int,
-    NET_RULE_RE as _NET_RULE_RE,
-    YARA_RULE_RE as _YARA_RULE_RE,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"

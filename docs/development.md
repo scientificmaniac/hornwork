@@ -42,7 +42,7 @@ hornwork/
 │   ├── intel/                 # IOC 库 / feeds / intel2rule / STIX 子集
 │   ├── respond/              # 工单 / playbook / 动作 / 审批门 / 审计哈希链
 │   ├── verify/                # runner / judge / metrics / forensics + simulate/（脚本契约）
-│   ├── web/                   # 标准库 HTTP 控制台 + 静态单页（index.html / platform.html）
+│   ├── web/                   # 标准库 HTTP 控制台：server.py 传输层 + routing.py 路由 + api/* 分域 handler + errors/context/common + static/
 │   ├── scan/                  # 定期漏洞扫描：资产/计划/任务/闸门/引擎/CVE 匹配/diff/覆盖率/报告
 │   ├── lab/                   # Vulhub 靶场编排（索引/compose/端口/守卫/状态）
 │   ├── vuln/                  # 漏洞档案模型 / CVSS 3.1 / 版本区间匹配 / 报告

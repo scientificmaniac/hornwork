@@ -14,10 +14,18 @@
 - 修复 PyYAML 六十进制端口反推颠倒、`tls_ports()` 处理字符串 `facts_json` 崩溃、
   降级 flow 对 ARP 空 IP 的元组比较类型错误；
 - 修复控制面无界请求缓冲、并发统计丢计数、导出路径越界、守护进程控制面启动失败即崩溃；
-- 修复无免密 sudo 环境下 `core.sh()` 静默失败（只读命令降级为普通用户执行）。
+- 修复无免密 sudo 环境下 `core.sh()` 静默失败（只读命令降级为普通用户执行）；
+- 修复 `test_session_step_up_and_action_guard` 在 UTC 02:00–06:00 运行时因
+  `unusual_time` 风险加分而误要求人脸的时段敏感问题（测试改用安全时钟并统一 `now`）。
 
 ### Changed
 
+- Web 控制台服务重构：`hornwork/web/server.py` 由 1522 行降至 530 行，业务 handler
+  按域拆到 `hornwork/web/api/` 的 14 个 mixin；抽出 `errors.py`（C7/软错误/认证状态机
+  三态）、`context.py`（WebContext/TTL 缓存/认证引擎双检锁）、`routing.py`（静态路由表）、
+  `common.py`（公共工具）。对外接口与路由行为不变，设计说明见 `docs/web-server-refactor.md`；
+- Web 控制台启用 HTTP/1.1 keep-alive 并对连接设置 `TCP_NODELAY`，`/healthz` 吞吐实测
+  由约 671 req/s 提升到约 1844 req/s（约 2.7 倍）；空闲连接 30 s 自动回收；
 - 抽取登录公共口令认证段 `_authenticate_password`，统一两条登录路径的安全逻辑与 rehash 审计；
 - 规则目录解析统一到 `engines/_rule_dir.py`，auditd/authlog 的 tail 跟随统一到 `collectors/_tail.py`；
 - playbook `rollback` 由未接线的声明改为按条件自动执行（`undo_of` 引用步骤凭据，
