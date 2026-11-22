@@ -37,8 +37,31 @@ from ..verify.metrics import compute_metrics
 log = get_logger("web")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+# Vue 控制台构建产物目录（`frontend/dist` 拷入此处）；缺失时回退到旧版单页。
+APP_DIR = STATIC_DIR / "app"
 MAX_BODY = 2 * 1024 * 1024
 LOOPBACK = {"127.0.0.1", "localhost", "::1", ""}
+# 静态资源类型（Vite 产物只会用到这几种；未知按 octet-stream 下载）
+_ASSET_TYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".map": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+}
+# 带内容哈希的文件可长期缓存；入口 HTML 必须每次校验（发布后立即生效）
+_ASSET_CACHE = "public, max-age=31536000, immutable"
+_HTML_CACHE = "no-cache"
 # 网络规则/YARA 规则文件里取规则名的轻量正则（只做列表展示，不参与匹配）
 _NET_RULE_RE = re.compile(r"^\s*rule\s+([A-Za-z0-9_.\-]+)\s+([A-Za-z0-9_.\-]+)")
 _YARA_RULE_RE = re.compile(r"^\s*rule\s+([A-Za-z0-9_]+)")
@@ -146,7 +169,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             if method not in ("GET", "HEAD"):
                 raise _HttpError(405, "静态页只支持 GET")
-            return self._serve_platform()
+            return self._serve_app_index()
         if path == "/index.html":
             if method not in ("GET", "HEAD"):
                 raise _HttpError(405, "静态页只支持 GET")
@@ -154,7 +177,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path in ("/platform", "/platform.html"):
             if method not in ("GET", "HEAD"):
                 raise _HttpError(405, "静态页只支持 GET")
-            return self._serve_platform()
+            return self._serve_app_index()
+        # Vue 控制台的构建产物（哈希分块，与 index.html 一一对应）
+        if path.startswith("/assets/"):
+            if method not in ("GET", "HEAD"):
+                raise _HttpError(405, "静态资源只支持 GET")
+            return self._serve_asset(path[len("/assets/"):])
         if path == "/healthz":
             if method not in ("GET", "HEAD"):
                 raise _HttpError(405, "健康检查只支持 GET")
@@ -761,13 +789,15 @@ class _Handler(BaseHTTPRequestHandler):
     def _send(self, status: int, body: bytes, content_type: str, headers: dict[str, str] | None = None) -> None:
         if self._sent:
             return
+        extra = dict(headers or {})
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        # 默认禁止缓存（接口与旧页面）；静态产物用显式 Cache-Control 覆盖
+        self.send_header("Cache-Control", extra.pop("Cache-Control", "no-store"))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Connection", "close")
-        for key, value in (headers or {}).items():
+        for key, value in extra.items():
             self.send_header(key, value)
         self.end_headers()
         if getattr(self, "_method", "GET") != "HEAD" and body:
@@ -844,6 +874,32 @@ class _Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             raise _HttpError(500, "静态页缺失", detail=exc) from exc
         self._send_bytes(200, body, "text/html; charset=utf-8")
+
+    def _serve_app_index(self) -> None:
+        """Vue 控制台入口页；产物缺失时回退旧版单页，保证升级过程中控制台始终可打开。"""
+        entry = APP_DIR / "index.html"
+        try:
+            body = entry.read_bytes()
+        except OSError:
+            return self._serve_platform()
+        self._send_bytes(200, body, "text/html; charset=utf-8", {"Cache-Control": _HTML_CACHE})
+
+    def _serve_asset(self, rel: str) -> None:
+        """服务 `/assets/*`：只允许 APP_DIR 内的常规文件，路径穿越一律 404。"""
+        name = rel.split("?", 1)[0]
+        if not name or "/" in name or "\\" in name or name.startswith("."):
+            raise _HttpError(404, "静态资源不存在", retryable=False)
+        root = (APP_DIR / "assets").resolve()
+        target = (root / name).resolve()
+        # is_relative_to 比字符串前缀比较更严格：`/assets-evil/x.js` 不会被误判为目录内
+        if not target.is_relative_to(root) or not target.is_file():
+            raise _HttpError(404, "静态资源不存在", retryable=False)
+        try:
+            body = target.read_bytes()
+        except OSError as exc:
+            raise _HttpError(404, "静态资源不存在", retryable=False, detail=exc) from exc
+        ctype = _ASSET_TYPES.get(target.suffix.lower(), "application/octet-stream")
+        self._send_bytes(200, body, ctype, {"Cache-Control": _ASSET_CACHE})
 
     def _healthz(self) -> None:
         self._send_json(

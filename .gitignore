@@ -84,3 +84,12 @@ tests/_tmp/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# 前端：依赖、构建产物、本地缓存（源码与 package-lock.json 正常入库）
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+# 前端构建产物（make frontend 生成到 hornwork/web/static/app）
+hornwork/web/static/app/
+# 端到端测试截图
+.e2e/

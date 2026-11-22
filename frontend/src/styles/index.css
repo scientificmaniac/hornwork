@@ -1,0 +1,166 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--tone-info);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text-strong);
+}
+
+/* ---------------------------------------------------------------------------
+ * Element Plus 主题桥接：只把设计变量映射到组件变量，不改组件内部结构。
+ * 这样换肤只需动 tokens.css，不会与组件库样式打补丁式互覆盖。
+ * ------------------------------------------------------------------------- */
+:root {
+  --el-color-primary: #1f5fbf;
+  --el-color-success: #1b6e2a;
+  --el-color-warning: #a15c00;
+  --el-color-danger: #b00020;
+  --el-color-info: #5b6878;
+  --el-bg-color: var(--surface);
+  --el-bg-color-overlay: var(--surface);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: var(--surface-alt);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border-soft);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-muted);
+  --el-text-color-secondary: var(--text-faint);
+  --el-font-size-base: 13px;
+  --el-border-radius-base: 4px;
+}
+
+:root[data-theme='dark'] {
+  --el-color-primary: #5aa9f5;
+  --el-color-success: #4cc38a;
+  --el-color-warning: #f0a53e;
+  --el-color-danger: #ff6b81;
+  --el-color-info: #9aa7b8;
+  --el-bg-color-page: var(--page-bg);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: var(--surface-alt);
+  --el-border-color: var(--border);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-muted);
+}
+
+/* 表格密度：控制台以信息密度优先 */
+.el-table {
+  --el-table-border-color: var(--border-soft);
+  --el-table-header-bg-color: var(--surface-alt);
+  --el-table-row-hover-bg-color: var(--surface-hover);
+  --el-table-text-color: var(--text);
+  font-size: 12px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.el-card {
+  --el-card-padding: 12px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card) !important;
+}
+
+.el-card__header {
+  padding: 9px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-strong);
+}
+
+/* ---------------------------------------------------------------------------
+ * 布局工具类：只保留真正跨页面复用的几个，避免变成半个 CSS 框架
+ * ------------------------------------------------------------------------- */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--text-faint);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1100px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.toolbar .spacer {
+  margin-left: auto;
+}
+
+.toolbar .el-input,
+.toolbar .el-select {
+  width: 168px;
+}
+
+.toolbar .el-input.is-wide,
+.toolbar .el-select.is-wide {
+  width: 240px;
+}

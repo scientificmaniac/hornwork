@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import unittest
 import urllib.error
@@ -36,6 +37,7 @@ from hornwork.verify import (
 )
 from hornwork.verify import runner as runner_mod
 from hornwork.web import WebServer
+from hornwork.web import server as server_mod
 
 TESTS_DIR = Path(__file__).resolve().parent
 TMP_ROOT = TESTS_DIR / "_tmp"
@@ -672,6 +674,60 @@ class WebServerTestCase(unittest.TestCase):
         self.assertTrue(self.server.status()["running"])
         self.server.stop()
         self.assertFalse(self.server.status()["running"])
+
+    # ------------------------------------------------------------ 静态资源托管
+    def test_serves_built_console_and_assets(self) -> None:
+        """Vue 控制台产物：`/` 返回 index.html，`/assets/*` 按扩展名给 MIME 与长缓存。"""
+        app_dir = Path(server_mod.APP_DIR)
+        if not (app_dir / "index.html").is_file():
+            self.skipTest("未构建前端产物（frontend/dist → hornwork/web/static/app）")
+
+        self.server.start()
+        with self._get("/") as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIn("text/html", resp.headers.get("Content-Type", ""))
+            html = resp.read().decode("utf-8")
+        self.assertIn('id="app"', html)
+        # 入口 HTML 必须每次协商，避免发布后浏览器用旧壳加载已删除的分块
+        self.assertEqual(resp.headers.get("Cache-Control"), "no-cache")
+
+        match = re.search(r'/assets/([\w.\-]+\.js)', html)
+        self.assertIsNotNone(match, "index.html 未引用任何 /assets/*.js")
+        with self._get(f"/assets/{match.group(1)}") as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIn("javascript", resp.headers.get("Content-Type", ""))
+            self.assertIn("immutable", resp.headers.get("Cache-Control", ""))
+            self.assertTrue(resp.read())
+
+    def test_asset_route_blocks_traversal(self) -> None:
+        """`/assets/../../etc/passwd` 之类的穿越请求必须 404，不能读到产物目录外文件。"""
+        self.server.start()
+        for path in ("/assets/..%2f..%2fserver.py", "/assets/../index.html", "/assets/"):
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self._get(path)
+            self.assertIn(ctx.exception.code, (404, 405))
+            ctx.exception.close()
+
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._post("/assets/index.js", {})
+        self.assertEqual(ctx.exception.code, 405)
+        ctx.exception.close()
+
+    def test_asset_mime_map(self) -> None:
+        """扩展名 → MIME 映射：Vite 产物只会用到这几类，未知类型按二进制下载。"""
+        expected = {
+            ".js": "text/javascript",
+            ".css": "text/css",
+            ".html": "text/html",
+            ".svg": "image/svg+xml",
+            ".woff2": "font/woff2",
+        }
+        for suffix, mime in expected.items():
+            self.assertIn(mime, server_mod._ASSET_TYPES[suffix], suffix)
+        self.assertEqual(
+            server_mod._ASSET_TYPES.get(".exe", "application/octet-stream"),
+            "application/octet-stream",
+        )
 
 
 def tearDownModule() -> None:

@@ -1,0 +1,98 @@
+/**
+ * 设计变量。
+ *
+ * 沿用旧 platform.html 的蓝白企业风作为默认主题（`light`），
+ * `dark` 对应 index.html 的技术风。组件只使用变量，不写死颜色，
+ * 换肤只需改这里。
+ */
+
+:root {
+  color-scheme: light;
+
+  --font-sans: 'Microsoft YaHei', 'Segoe UI', 'Ubuntu', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Consolas', 'JetBrains Mono', 'Courier New', monospace;
+
+  /* 版式 */
+  --page-bg: #eef1f6;
+  --surface: #ffffff;
+  --surface-alt: #f5f7fb;
+  --surface-hover: #fafbfe;
+  --border: #dbe2ec;
+  --border-soft: #eef1f6;
+  --border-strong: #c3ccd8;
+
+  --text: #1c2430;
+  --text-strong: #1f3864;
+  --text-muted: #5b6878;
+  --text-faint: #8a94a3;
+
+  /* 语义色 */
+  --tone-danger: #b00020;
+  --tone-warning: #a15c00;
+  --tone-success: #1b6e2a;
+  --tone-info: #1f5fbf;
+
+  --badge-danger-bg: #fdecea;
+  --badge-danger-fg: #b00020;
+  --badge-warning-bg: #fff4e5;
+  --badge-warning-fg: #a15c00;
+  --badge-success-bg: #e8f5e9;
+  --badge-success-fg: #1b6e2a;
+  --badge-info-bg: #e8f0fd;
+  --badge-info-fg: #1f4f9e;
+  --badge-neutral-bg: #eef1f6;
+  --badge-neutral-fg: #5b6878;
+
+  /* 框架色（侧栏、登录页） */
+  --frame-bg: #16213c;
+  --frame-bg-soft: #1e2c4c;
+  --frame-active: #2a4f8a;
+  --frame-text: #cfd8e6;
+  --frame-text-dim: #8fa0bd;
+  --frame-border: #24314f;
+
+  --shadow-card: 0 1px 2px rgba(17, 34, 64, 0.05);
+  --radius: 6px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --page-bg: #11161f;
+  --surface: #171d27;
+  --surface-alt: #1d2431;
+  --surface-hover: #222a38;
+  --border: #2a3342;
+  --border-soft: #232b38;
+  --border-strong: #3a4657;
+
+  --text: #d7dee9;
+  --text-strong: #eaf1fb;
+  --text-muted: #9aa7b8;
+  --text-faint: #75828f;
+
+  --tone-danger: #ff6b81;
+  --tone-warning: #f0a53e;
+  --tone-success: #4cc38a;
+  --tone-info: #5aa9f5;
+
+  --badge-danger-bg: #3a1d24;
+  --badge-danger-fg: #ff8b9d;
+  --badge-warning-bg: #3a2c17;
+  --badge-warning-fg: #f5b662;
+  --badge-success-bg: #173026;
+  --badge-success-fg: #66d9a2;
+  --badge-info-bg: #16273d;
+  --badge-info-fg: #7cbcff;
+  --badge-neutral-bg: #232b38;
+  --badge-neutral-fg: #9aa7b8;
+
+  --frame-bg: #0d121b;
+  --frame-bg-soft: #151d2a;
+  --frame-active: #22344f;
+  --frame-text: #c3cddb;
+  --frame-text-dim: #7d8b9d;
+  --frame-border: #1d2532;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
