@@ -5,7 +5,7 @@ import { defineStore } from 'pinia';
 
 import { authApi } from '@/api/modules/auth';
 import { readSession, writeSession } from '@/api/client';
-import type { LoginRequest, LoginResult, SessionInfo } from '@/types/auth';
+import type { LoginRequest, LoginResult, Role, SessionInfo } from '@/types/auth';
 
 /** 登录态判定：后端以 `ok` 为准，`degraded=true` 仍算成功（只是 LOA 受限）。 */
 export function isLoginSuccess(result: LoginResult): boolean {
@@ -22,6 +22,8 @@ export const useAuthStore = defineStore('auth', () => {
   const loggedIn = computed(() => Boolean(session.value));
   const loa = computed(() => info.value?.loa ?? 0);
   const username = computed(() => info.value?.user.username ?? '');
+  const role = computed<Role>(() => info.value?.user.role ?? 'viewer');
+  const isAdmin = computed(() => role.value === 'admin');
   const displayLoa = computed(() => info.value?.loa_name ?? (loa.value ? `LOA${loa.value}` : '-'));
 
   function clear(): void {
@@ -86,6 +88,8 @@ export const useAuthStore = defineStore('auth', () => {
     loggedIn,
     loa,
     username,
+    role,
+    isAdmin,
     displayLoa,
     login,
     stepUp,

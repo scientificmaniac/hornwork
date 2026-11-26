@@ -613,7 +613,7 @@ flowchart TD
   采集覆盖依赖内核能力：auditd 需规则加载、`AF_PACKET` 需 `CAP_NET_RAW`、inotify 有
   watch 上限（`collect.fim.max_watches`）、`/proc/pid/mem` 受 Yama 限制。
   Windows 只用于开发与单测：控制面 socket、抓包、inotify、内存扫描均不可用。
-  Web 控制台是"单机自托管"定位，不做多用户 RBAC，只有静态 token 与认证子系统会话两种入口。
+  Web 控制台是"单机自托管"定位，多用户采用最小角色模型（viewer/operator/admin），角色白名单与 LOA 是 AND 关系，管理接口按 admin 角色门禁；静态 Bearer token 是独立的非用户运维通道，不进角色模型。
   验证套件的模拟脚本随目标环境提供，仓库只带契约（见 `docs/verification.md`）。
 
 ## 11. 相关文档

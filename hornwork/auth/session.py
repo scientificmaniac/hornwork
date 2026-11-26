@@ -45,11 +45,34 @@ def _sign(keyring: crypto.KeyRing, body: str) -> str:
     return crypto.b64u(crypto.mac(keyring.k_session, body.encode("ascii")))
 
 
+def _ua_digest(ua: str | None) -> str | None:
+    """User-Agent 归一化摘要（截断 32 位十六进制，够区分且不留原文）。"""
+    if not ua:
+        return None
+    return crypto.sha256_hex(str(ua).encode("utf-8"))[:32]
+
+
+def _ip_prefix(ip: str | None) -> str:
+    """IPv4 取 /24 网段；非 IPv4 原样返回（无 GeoIP，诚实粗判）。"""
+    if not ip:
+        return ""
+    parts = str(ip).split(".")
+    return ".".join(parts[:3]) if len(parts) == 4 else str(ip)
+
+
 def issue(store, keyring: crypto.KeyRing, user_id: int, loa: int,
           ip: str | None = None, device_id: str | None = None,
           ua_hash: str | None = None, now: float | None = None,
-          policy: dict | None = None, strong_auth: bool = False) -> dict[str, Any]:
-    """签发会话：登录成功**重新签发**（防会话固定），返回令牌与行信息。"""
+          policy: dict | None = None, strong_auth: bool = False,
+          ua: str | None = None) -> dict[str, Any]:
+    """签发会话：登录成功**重新签发**（防会话固定），返回令牌与行信息。
+
+    ``ua`` 是原始 User-Agent（Web 层传入），会被归一化成 ``ua_hash`` 落库；
+    也允许调用方直接传已归一化的 ``ua_hash``。二者都不传则该列留空，
+    校验时跳过 UA 绑定（兼容 CLI 等无 UA 场景）。
+    """
+    if ua is not None and ua_hash is None:
+        ua_hash = _ua_digest(ua)
     idle_ttl, abs_ttl = _ttl(policy, loa)
     sid_bytes = crypto.os.urandom(16)
     sid = crypto.b64u(sid_bytes)
@@ -71,8 +94,14 @@ def issue(store, keyring: crypto.KeyRing, user_id: int, loa: int,
 
 
 def verify(store, keyring: crypto.KeyRing, token: str, now: float | None = None,
-           touch: bool = True, policy: dict | None = None) -> dict[str, Any]:
-    """校验签名 → 查登记 → 未撤销未过期 → 刷新 idle 窗口。"""
+           touch: bool = True, policy: dict | None = None,
+           ua: str | None = None, request_ip: str | None = None) -> dict[str, Any]:
+    """校验签名 → 查登记 → 未撤销未过期 → 绑定校验 → 刷新 idle 窗口。
+
+    ``ua`` 原始 User-Agent：会话登记了 ua_hash 且本次 UA 摘要不一致 → ua_mismatch。
+    ``request_ip`` 仅记录进返回行的 ``request_ip`` 字段供上层做漂移判定，不在
+    此处直接拒绝（NAT/移动网络误伤），由 decide() 结合风险分决定。
+    """
     parts = (token or "").split(".")
     if len(parts) != 4 or parts[0] != "s1":
         raise SessionError("malformed")
@@ -92,6 +121,11 @@ def verify(store, keyring: crypto.KeyRing, token: str, now: float | None = None,
         raise SessionError("expired")
     if str(row["idle_expires_ts"]) <= now_iso:
         raise SessionError("idle_expired")
+    # UA 绑定：仅当会话登记过 ua_hash 时才校验；CLI 等无 UA 场景留空跳过
+    if ua is not None and row.get("ua_hash"):
+        if not crypto.const_compare(str(row["ua_hash"]), _ua_digest(ua) or ""):
+            raise SessionError("ua_mismatch")
+    row["request_ip"] = request_ip
     if touch:
         idle_ttl, _abs = _ttl(policy, int(row["loa"]))
         new_idle = min(_iso_add(now, idle_ttl), str(row["expires_ts"]))

@@ -30,6 +30,28 @@ def min_loa(action: str) -> int:
     return ACTION_MIN_LOA.get(str(action or "read"), 2)
 
 
+# 角色 action 白名单：与 LOA 是 AND 关系——角色过 ≠ 放行，仍要过 min_loa/step-up。
+# admin 也要 LOA3 才能写；viewer 就算 LOA3 也不能写。
+ROLE_ACTIONS = {
+    "viewer": {"read"},
+    "operator": {"read", "write", "sensitive", "ssh", "sudo"},
+    "admin": {"read", "write", "sensitive", "ssh", "sudo", "admin"},
+}
+
+
+def role_allows(role: str, action: str) -> bool:
+    """角色是否允许该 action（纯权限判定，不含 LOA/强认证窗口）。"""
+    return str(action or "read") in ROLE_ACTIONS.get(str(role or ""), set())
+
+
+def min_role(action: str) -> str | None:
+    """能执行该 action 的最低角色（用于 wrong_role 的可诊断 detail）。"""
+    for name in ("viewer", "operator", "admin"):
+        if str(action or "read") in ROLE_ACTIONS[name]:
+            return name
+    return None
+
+
 def _parse(ts: str | None) -> datetime | None:
     if not ts:
         return None

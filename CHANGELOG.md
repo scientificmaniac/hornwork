@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Web 控制台访问审计与最小多用户模型：`console_access` 审计覆盖每次已鉴权请求（action/LOA/decision/session），
+  `auth_user.role` 引入 viewer/operator/admin 三角色（`role_allows` 白名单与 LOA 是 AND 关系），
+  `/api/auth/users|sessions|audit|policy` 管理接口按 admin 门禁；会话绑定 User-Agent、
+  IP 漂移触发风险重算与 step-up；新增 `hornworkctl auth user set-role`；
+  Q1–Q5 决议与工程规格见 `docs/console-audit-multiusr-{plan,spec}.md`；
+  - 升级迁移：`auth.schema_version` 升到 2，`auth_user` 增 `role` 列；升级时提升 id 最小账号
+    为引导 admin，新装时空库首个账号自动成为 admin；
+  - `/api/export`、`/api/report` 收紧为 `sensitive`（需 LOA3）；静态 Bearer token 仍为
+    非用户运维通道，不受角色门禁限制。
+
 ### Fixed
 
 - 修复 `FlowTable` 在容量满时因非重入锁导致的确定性死锁（改用 `RLock`）；

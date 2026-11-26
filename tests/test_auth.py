@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cryptography.exceptions import InvalidTag  # noqa: E402
 
-from hornwork.auth import audit, biometric, crypto, db, password, risk, session, totp  # noqa: E402
+from hornwork.auth import audit, biometric, crypto, db, password, policy, risk, session, totp  # noqa: E402
 from hornwork.auth.engine import AuthEngine  # noqa: E402
 from hornwork.config import load_config  # noqa: E402
 
@@ -439,6 +439,67 @@ class EngineLoginTest(AuthTestBase):
         res = audit.verify_chain(self.store)
         self.assertFalse(res["ok"])
         self.assertEqual(res["bad_id"], row["id"])
+
+
+class RoleModelTest(AuthTestBase):
+    """第[1]步：角色迁移、白名单、set-role 保护。"""
+
+    def test_role_allows_matrix(self) -> None:
+        self.assertFalse(policy.role_allows("viewer", "write"))
+        self.assertTrue(policy.role_allows("viewer", "read"))
+        self.assertTrue(policy.role_allows("operator", "write"))
+        self.assertFalse(policy.role_allows("operator", "admin"))
+        self.assertTrue(policy.role_allows("admin", "admin"))
+        # 未知角色/动作一律拒绝
+        self.assertFalse(policy.role_allows("", "read"))
+        self.assertFalse(policy.role_allows("admin", "unknown_action"))
+        self.assertEqual(policy.min_role("admin"), "admin")
+        self.assertEqual(policy.min_role("write"), "operator")
+        self.assertEqual(policy.min_role("read"), "viewer")
+
+    def test_migration_is_idempotent(self) -> None:
+        # setUp 已经跑到 schema v2；重复迁移不应报错，也不重复 ALTER
+        db.migrate_schema(self.store)
+        db.migrate_schema(self.store)
+        cols = {str(r["name"]) for r in self.store.query("PRAGMA table_info(auth_user)")}
+        self.assertIn("role", cols)
+        self.assertEqual(db.AUTH_SCHEMA_VERSION, "2")
+
+    def test_create_user_role_and_set_role(self) -> None:
+        # 空库首个账号自动 admin
+        self.eng.create_user("first_user", "Str0ng-Passw0rd-2026")
+        self.assertEqual(self.eng.get_user("first_user")["role"], "admin")
+        self.eng.create_user("dave_role", "Str0ng-Passw0rd-2026")
+        self.assertEqual(self.eng.get_user("dave_role")["role"], "viewer")
+        self.eng.create_user("admin_role", "Admin-Passw0rd!2026", admin=True)
+        self.assertEqual(self.eng.get_user("admin_role")["role"], "admin")
+        self.assertIn("role", self.eng.list_users()[0])
+
+        # 无 TOTP/人脸时提升为 operator 被拒绝
+        with self.assertRaises(ValueError) as ctx:
+            self.eng.set_role("dave_role", "operator")
+        self.assertIn("TOTP", str(ctx.exception))
+
+        # 注册因子后可提升
+        info = self.eng.enroll_totp("dave_role")
+        secret = totp.from_b32(info["secret_b32"])
+        self.assertTrue(self.eng.confirm_totp("dave_role", totp.totp(secret))[0])
+        self.eng.enroll_biometric("dave_role", _vec(0.4))
+        res = self.eng.set_role("dave_role", "operator")
+        self.assertEqual(res["old_role"], "viewer")
+        self.assertEqual(self.eng.get_user("dave_role")["role"], "operator")
+        audit_rows = audit.tail(self.store, "dave_role", 1)
+        self.assertEqual(audit_rows[0]["event"], "role_change")
+
+    def test_cannot_demote_last_admin(self) -> None:
+        # 空库首个账号自动 admin，此时库中只有一个 admin
+        self.eng.create_user("solo_admin", "Admin-Passw0rd!2026")
+        self.assertEqual(self.store.query_one(
+            "SELECT COUNT(*) AS n FROM auth_user WHERE role='admin'")["n"], 1)
+        with self.assertRaises(ValueError) as ctx:
+            self.eng.set_role("solo_admin", "viewer")
+        self.assertIn("最后一个 admin", str(ctx.exception))
+        self.assertEqual(self.eng.get_user("solo_admin")["role"], "admin")
 
 
 class ConsoleAuditChainTest(AuthTestBase):

@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import hmac
 import json
 import os
 import socket
@@ -31,6 +30,7 @@ from .context import WebContext
 from .errors import HttpError as _HttpError, error_payload as _error_payload
 from .routing import build_routes, lookup as _route_lookup
 from .api import (
+    AuthorizeMixin,
     AuthMixin,
     IntegrationMixin,
     EventsMixin,
@@ -83,7 +83,7 @@ _HTML_CACHE = "no-cache"
 # ---------------------------------------------------------------------------
 # 请求处理器
 # ---------------------------------------------------------------------------
-class _Handler(BaseHTTPRequestHandler, AuthMixin, IntegrationMixin, EventsMixin, HardenMixin, ReportMixin, LabMixin, ScanMixin, OverviewMixin, RulesMixin, IntelMixin, CasesMixin, ValidateMixin, ExportMixin, MetricsMixin):
+class _Handler(BaseHTTPRequestHandler, AuthorizeMixin, AuthMixin, IntegrationMixin, EventsMixin, HardenMixin, ReportMixin, LabMixin, ScanMixin, OverviewMixin, RulesMixin, IntelMixin, CasesMixin, ValidateMixin, ExportMixin, MetricsMixin):
     """单页控制台的全部路由处理。"""
 
     server_version = "HornworkWeb/" + __version__
@@ -157,9 +157,10 @@ class _Handler(BaseHTTPRequestHandler, AuthMixin, IntegrationMixin, EventsMixin,
                 raise _HttpError(405, f"{path} {hint}")
             raise _HttpError(404, f"未知路由：{path}")
 
-        # 鉴权：静态页/健康检查/认证入口在路由表中标记 needs_auth=False
-        if route.needs_auth and not self._authorized():
-            raise _HttpError(401, "未授权：缺少或错误的 Bearer token", retryable=False)
+        # 鉴权：静态页/健康检查/认证入口在路由表中标记 needs_auth=False；
+        # 其余走统一授权（状态机决策 + 会话绑定 + console_access 审计）
+        if route.needs_auth:
+            self._authorize(route)
 
         handler = getattr(self, route.handler)
         kind = route.kind
@@ -239,29 +240,7 @@ class _Handler(BaseHTTPRequestHandler, AuthMixin, IntegrationMixin, EventsMixin,
     def _send_bytes(self, status: int, body: bytes, content_type: str, headers: dict[str, str] | None = None) -> None:
         self._send(status, body, content_type, headers)
 
-    # ------------------------------------------------------------ 鉴权/读体
-    def _authorized(self) -> bool:
-        # 1) 静态 Bearer token（运维/脚本入口）
-        token = self.app.token
-        header = self.headers.get("Authorization") or ""
-        given = header[7:].strip() if header.startswith("Bearer ") else ""
-        if token and given and hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
-            return True
-        # 2) 认证模块平台会话（三因子登录签发，s1.<...>）
-        session_token = self._session_token()
-        if session_token:
-            try:
-                info = self._auth_engine().session_info(session_token)
-                if info and info.get("session", {}).get("session_id"):
-                    return True
-            except Exception:  # noqa: BLE001 - 会话无效按未授权处理
-                return False
-        # 3) 无 token 配置时只允许本机来源（服务本身也只会绑定回环地址）
-        if not token:
-            host = self.client_address[0] if self.client_address else ""
-            return host in LOOPBACK or host.startswith("127.")
-        return False
-
+    # ------------------------------------------------------------ 读体
     def _read_json(self) -> dict:
         """读取并解析 JSON 请求体（限制 2MB）。"""
         try:
@@ -380,7 +359,7 @@ class _ThreadingServer(ThreadingHTTPServer):
 class WebServer:
     """Web 控制台：线程方式运行，只绑定配置地址。"""
 
-    def __init__(self, cfg: dict, store):
+    def __init__(self, cfg: dict, store, auth_engine=None):
         self.cfg = cfg or {}
         self.store = store
         web = (self.cfg.get("web") or {}) if isinstance(self.cfg, dict) else {}
@@ -394,7 +373,8 @@ class WebServer:
         self._lock = threading.RLock()
         self._started_at: float | None = None
         # 共享上下文：统计/重载/认证引擎/缓存的唯一来源（handler 经 app.ctx 访问）
-        self.ctx = WebContext(self.cfg, store, token=self.token, bind=self.bind, port=self.port)
+        self.ctx = WebContext(self.cfg, store, token=self.token, bind=self.bind,
+                              port=self.port, auth_engine=auth_engine)
         # 静态路由表：启动时构建一次，替代每请求重建字典
         self.routes = build_routes()
 

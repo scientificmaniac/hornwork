@@ -146,7 +146,8 @@ step_up:     LOA2 session requests a write action → re-verify TOTP + face
 | IF-25 | `auth` → `store` | in-process SQLite (WAL, same database) | rows of the seven tables | transaction rollback; `database is locked` absorbed by the store's 15 s busy timeout |
 | IF-26 | `auth.biometric` → face embedding source | **pluggable**: JSON vector file / lightweight image descriptor / (reserved) `127.0.0.1:8930` HTTP | 512-dim float32; the service variant takes a JPEG plus a challenge | embedding failure → LOA2 + `degraded` event; never locks every login |
 | IF-27 | `auth.audit` → `event` | in-process `store.insert_event` with the same `CanonicalEvent` | `logon` / `logon_fail`, `source_layer=host`, `source_product=hornwork-auth`, `raw.auth{loa,factors,risk,degraded,latency_ms}` | serialisation or write failure falls back to the DLQ; audit is not lost |
-| IF-28 | Web / CLI → auth middleware | in-process `engine.require_action(token, action)` | `allow / stepup_required / deny` plus LOA | invalid token → deny; insufficient LOA → stepup_required |
+| IF-28 | Web / CLI → auth middleware | in-process `engine.require_action(token, action)` / `engine.authorize(token, action, ua, request_ip)` | `allow / stepup_required / deny` plus LOA, role, reason | invalid token / UA mismatch → deny; insufficient LOA → stepup_required; role denied → deny |
+| IF-29 | Web → auth audit | in-process `audit.append(event="console_access")` | one row per authorized request: action/loa/decision/session/path | write failure → HTTP 500 + DLQ; chain head advanced in one SQLite write transaction (BUG-03-class protection) |
 
 ## 7. Reference implementation evidence
 

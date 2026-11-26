@@ -87,9 +87,12 @@ class WebContext:
         token: str = "",
         bind: str = "127.0.0.1",
         port: int = 0,
+        auth_engine: Any | None = None,
     ) -> None:
         self.cfg = cfg
         self.store = store
+        # 允许注入已构造的认证引擎（测试夹具用；生产走惰性构造）。
+        self._injected_auth_engine = auth_engine
         self.token = token
         self.bind = bind
         self.port = port
@@ -102,7 +105,7 @@ class WebContext:
             "count": 0,
             "note": "",
         }
-        self._auth_engine: Any | None = None
+        self._auth_engine: Any | None = auth_engine
 
     # ------------------------------------------------------------ 统计
     def note_request(self) -> None:
@@ -152,6 +155,10 @@ class WebContext:
         return eng
 
     def reset_auth_engine(self) -> None:
-        """测试或配置变更后重置引擎（清空引用，下次访问重新构造）。"""
+        """测试或配置变更后重置引擎（清空引用，下次访问重新构造）。
+
+        注入的引擎也一并清除——重置意味着回到"下次惰性构造"的默认行为。
+        """
         with self._lock:
+            self._injected_auth_engine = None
             self._auth_engine = None

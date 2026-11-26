@@ -39,6 +39,39 @@ describe('ApiError', () => {
   });
 });
 
+describe('403 分支判定（step-up / 角色不足不得当作掉登录）', () => {
+  const withReason = (reason: string) =>
+    new ApiError(
+      { code: 403, message: '拒绝', retryable: false, detail: null },
+      { detail: JSON.stringify({ reason, action: 'write' }) },
+    );
+
+  it('识别 step-up 类 403', () => {
+    for (const reason of ['stepup_required', 'loa_too_low', 'strong_auth_expired', 'session_ip_drift']) {
+      const error = withReason(reason);
+      expect(error.isStepUp).toBe(true);
+      expect(error.isRoleDenied).toBe(false);
+    }
+  });
+
+  it('识别角色不足 403', () => {
+    const error = withReason('role_denied');
+    expect(error.isRoleDenied).toBe(true);
+    expect(error.isStepUp).toBe(false);
+  });
+
+  it('401 与畸形 detail 不误判为 step-up', () => {
+    const e401 = new ApiError({ code: 401, message: '未授权', retryable: false, detail: null });
+    expect(e401.isStepUp).toBe(false);
+    expect(e401.isRoleDenied).toBe(false);
+    const malformed = new ApiError(
+      { code: 403, message: '拒绝', retryable: false, detail: null },
+      { detail: 'not-json' },
+    );
+    expect(malformed.isStepUp).toBe(false);
+  });
+});
+
 describe('describeError', () => {
   it('拼上 C7 detail 便于定位', () => {
     const error = new ApiError({ code: 400, message: '参数错误', retryable: false, detail: 'k=v' });

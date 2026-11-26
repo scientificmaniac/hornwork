@@ -11,7 +11,11 @@ from typing import Any
 
 from ..store import Store, now_utc
 
-AUTH_SCHEMA_VERSION = "1"
+AUTH_SCHEMA_VERSION = "2"
+
+#: 角色白名单；viewer 只读、operator 可写、admin 额外可管理用户/审计/策略。
+ROLE_VALUES = ("viewer", "operator", "admin")
+ROLE_DEFAULT = "viewer"
 
 DDL: list[str] = [
     """CREATE TABLE IF NOT EXISTS auth_user (
@@ -171,6 +175,7 @@ def open_auth_store(cfg: dict, db_path: str | Path | None = None) -> Store:
     """打开共库并幂等建表（auth_* / bio_* / trusted_device）。"""
     store = Store(Path(db_path) if db_path else resolve_db_path(cfg))
     init_schema(store)
+    migrate_schema(store)
     seed_policy(store)
     return store
 
@@ -178,7 +183,39 @@ def open_auth_store(cfg: dict, db_path: str | Path | None = None) -> Store:
 def init_schema(store: Store) -> None:
     for stmt in DDL:
         store.execute(stmt)
-    store.set_meta("auth.schema_version", AUTH_SCHEMA_VERSION)
+
+
+def migrate_schema(store: Store) -> None:
+    """幂等迁移：把 schema_version 升到当前版本，缺失的列按版本补上。
+
+    ``init_schema`` 只做 ``CREATE TABLE IF NOT EXISTS``，对已存在的表不会补列；
+    因此新增列必须在此显式 ALTER。执行顺序按 version 分支，重复调用安全。
+    """
+    try:
+        version = int(str(store.get_meta("auth.schema_version") or "1"))
+    except (TypeError, ValueError):
+        version = 1
+
+    if version < 2:
+        cols = {str(row["name"]) for row in store.query("PRAGMA table_info(auth_user)")}
+        if "role" not in cols:
+            store.execute(
+                f"ALTER TABLE auth_user ADD COLUMN role TEXT NOT NULL DEFAULT '{ROLE_DEFAULT}'")
+            # 升级引导：提升 id 最小的既有账号为 admin，避免管理接口无人可达。
+            # 新装从零开始的场景由 CLI `user set-role` 显式授权（见 CLI 文档）。
+            first = store.query_one("SELECT username FROM auth_user ORDER BY id LIMIT 1")
+            if first:
+                store.execute("UPDATE auth_user SET role='admin' WHERE id="
+                              "(SELECT id FROM auth_user ORDER BY id LIMIT 1)")
+        # 人工改库可能写入非法角色，兜底回退到 viewer
+        placeholders = ",".join("?" for _ in ROLE_VALUES)
+        store.execute(
+            f"UPDATE auth_user SET role=? WHERE role NOT IN ({placeholders})",
+            (ROLE_DEFAULT, *ROLE_VALUES),
+        )
+        version = 2
+
+    store.set_meta("auth.schema_version", str(version))
 
 
 # ---------------------------------------------------------------------------

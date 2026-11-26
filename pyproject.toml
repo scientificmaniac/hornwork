@@ -15,7 +15,9 @@ auth = [
   "cryptography>=42.0",
 ]
 dev = [
-  "ruff>=0.6",
+  # 与 CI 门禁（.github/workflows/ci.yml）锁定同一版本，避免规则集行为漂移；
+  # 升级时两处需同步，或改为仅在此处声明并由 CI 复用。
+  "ruff==0.17.6",
 ]
 
 [project.urls]

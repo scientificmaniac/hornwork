@@ -4,6 +4,7 @@ server.py 的 _Handler 通过多继承装配这些 mixin；方法体通过 self 
 传输层（_send_json/_send_bytes/_read_json/app/ctx 等）。
 """
 
+from .authorize import AuthorizeMixin
 from .auth import AuthMixin
 from .integration import IntegrationMixin
 from .events import EventsMixin
@@ -19,4 +20,4 @@ from .validate import ValidateMixin
 from .export import ExportMixin
 from .metrics import MetricsMixin
 
-__all__ = ["AuthMixin", "IntegrationMixin", "EventsMixin", "HardenMixin", "ReportMixin", "LabMixin", "ScanMixin", "OverviewMixin", "RulesMixin", "IntelMixin", "CasesMixin", "ValidateMixin", "ExportMixin", "MetricsMixin"]
+__all__ = ["AuthorizeMixin", "AuthMixin", "IntegrationMixin", "EventsMixin", "HardenMixin", "ReportMixin", "LabMixin", "ScanMixin", "OverviewMixin", "RulesMixin", "IntelMixin", "CasesMixin", "ValidateMixin", "ExportMixin", "MetricsMixin"]

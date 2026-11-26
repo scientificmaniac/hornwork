@@ -41,17 +41,19 @@ class AuthMixin:
                 username = str(body.get("username") or "").strip()
                 password = str(body.get("password") or "")
                 totp_code = str(body.get("totp") or "").strip()
+                # 会话绑定 UA：登录时写入 ua_hash，后续请求逐次校验
+                ua = self.headers.get("User-Agent")
                 if totp_code:
                     # 三因子路径（认证模块演示 / CLI 兼容）
                     res = eng.login(
-                        username, password, ip=ip,
+                        username, password, ip=ip, ua=ua,
                         device_token=(str(body.get("device_token") or "").strip() or None),
                         totp_code=totp_code, embedding=embedding,
                     )
                 else:
                     # 平台统一登录：账号 + 口令；人脸可选
                     res = eng.login_password_only(
-                        username, password, ip=ip, embedding=embedding)
+                        username, password, ip=ip, embedding=embedding, ua=ua)
             elif path == "/api/auth/step-up":
                 embedding = body.get("embedding")
                 res = eng.step_up(
@@ -76,7 +78,7 @@ class AuthMixin:
         if not token:
             raise _HttpError(401, "缺少平台会话令牌", retryable=False)
         try:
-            info = self._auth_engine().session_info(token)
+            info = self._auth_engine().session_info(token, ua=self.headers.get("User-Agent"))
         except Exception as exc:  # noqa: BLE001
             raise _HttpError(401, "会话无效或已过期", retryable=False, detail=str(exc)) from exc
         self._send_json(200, {"ok": True, "ts": _iso_now(), **info})

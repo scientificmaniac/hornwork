@@ -15,7 +15,7 @@
 | 项 | 要求 |
 |---|---|
 | 操作系统 | Linux（Ubuntu 22.04+ 推荐）；本地开发也可在 macOS/Windows 上跑跨平台用例 |
-| Python | **3.11+**（CI 覆盖 3.11 / 3.12 / 3.13） |
+| Python | **3.11+**（CI 覆盖 3.11 / 3.12 / 3.13 / 3.14） |
 | 第三方 Python 库 | `yara-python`、`PyYAML`；修改认证子系统时另需 `argon2-cffi`、`cryptography` |
 
 > 说明：`pyproject.toml` 当前只声明了 `yara-python` 与 `PyYAML`。认证子系统
@@ -32,8 +32,7 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install argon2-cffi cryptography   # 认证/加固用例所需
+python -m pip install -e '.[auth,dev]'   # 运行期 + 认证/加固 + ruff 开发工具
 ```
 
 ### 系统级依赖（可选，跑完整功能时需要）
@@ -104,8 +103,8 @@ python -m unittest tests.test_engines -v
 可选的自查（不强制，允许提示性失败）：
 
 ```bash
-python -m pip install ruff
-ruff check .
+# ruff 已随上面的 dev extra 以固定版本装入，与 CI 门禁完全一致
+ruff check hornwork tests
 ```
 
 ## 5. 新增检测规则

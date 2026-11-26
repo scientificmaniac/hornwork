@@ -5,6 +5,9 @@ import type { ChainInfo } from './common';
 /** LOA 0–3：0 未认证 / 1 口令 / 2 口令+动态码 / 3 口令+动态码+人脸。 */
 export type Loa = 0 | 1 | 2 | 3;
 
+/** 角色：viewer 只读 / operator 可写 / admin 额外管理用户与审计。 */
+export type Role = 'viewer' | 'operator' | 'admin';
+
 export interface LoginRequest {
   username: string;
   password: string;
@@ -63,7 +66,7 @@ export interface SessionInfo {
   ok: boolean;
   ts?: string;
   session: SessionRow;
-  user: { id: number; username: string };
+  user: { id: number; username: string; role?: Role };
   loa: number;
   loa_name: string;
 }
@@ -71,6 +74,7 @@ export interface SessionInfo {
 export interface UserRow {
   id: number;
   username: string;
+  role?: Role;
   display_name?: string | null;
   status: string;
   loa_max: number;

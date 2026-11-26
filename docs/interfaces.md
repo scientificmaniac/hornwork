@@ -275,7 +275,8 @@ VerifyRunner(store, cfg, ctl_call=None).run(suite="baseline", window_sec=None, e
 | IF-25 | `hornwork.auth` → `store` | 进程内 SQLite（同库 WAL） | `auth_user` / `auth_credential` / `auth_session` / `bio_template` / `auth_audit` / `auth_policy` / `trusted_device` | 事务回滚；锁等待由 Store `busy_timeout=15 s` 兜底 |
 | IF-26 | `auth.biometric` → 人脸嵌入 | 可插拔：JSON 向量 / 轻量图像描述子 /（预留）`127.0.0.1:8930` HTTP | 512 维 float32 | 可选因子失败 → 降级 LOA2 + `degraded`；LOA3 强制路径下模板全部无法解密 → 拒绝并回 `template_undecryptable`（不伪装成相似度不足） |
 | IF-27 | `auth.audit` → `event` | 进程内 `store.insert_event` | `CanonicalEvent{logon\|logon_fail, source_layer=host, source_product=hornwork-auth, user{name,id,action}, raw.auth{loa,factors,risk,degraded,latency_ms}}` | 写库/序列化失败 → `dlq` 兜底 |
-| IF-28 | `web`/CLI → `auth` | 进程内 `AuthEngine.require_action(token, action)` | `allow` / `stepup_required` / `deny` + LOA | 令牌无效/过期 → deny；LOA 不足 → stepup_required |
+| IF-28 | `web`/CLI → `auth` | 进程内 `AuthEngine.require_action(token, action)` / `authorize(token, action, ua, request_ip)` | `allow` / `stepup_required` / `deny` + LOA + reason | 令牌无效/过期/UA 不符 → deny；LOA 不足 → stepup_required；角色不足 → deny(role_denied) |
+| IF-29 | `web` → `auth.audit` | 进程内 `audit.append(event="console_access")` + `Store.auth_audit_append_atomic` | 每次已鉴权请求一行：action/loa/decision/session/path | 审计写失败 → HTTP 500 + DLQ（不留无审计访问）；链头在同一 SQLite 写事务内推进，参见 BUG-03 同类保护 |
 
 认证子系统新增配置段：
 
@@ -289,9 +290,12 @@ VerifyRunner(store, cfg, ctl_call=None).run(suite="baseline", window_sec=None, e
 engine.login(username, password, ip, device_token, totp_code, embedding) -> dict
 engine.start_login(...) / engine.advance(challenge_id, totp_code, embedding)
 engine.step_up(token, totp_code, embedding)
-engine.require_action(token, action)  # allow | stepup_required | deny
+engine.require_action(token, action)  # allow | stepup_required | deny（CLI/测试口径）
+engine.authorize(token, action, ua=..., request_ip=...)  # Web 中间件口径，含 UA/IP 绑定
 engine.session_info(token) / engine.logout(token)
 ```
+
+角色模型（最小可用）：`auth_user.role` 取 `viewer` / `operator` / `admin`；`policy.role_allows(role, action)` 是纯白名单判定，与 LOA 是 AND 关系。`viewer` 只读、`operator` 可写、`admin` 额外可访问 `/api/auth/users|sessions|audit|policy`。角色用 `hornworkctl auth user set-role` 维护；提升为 operator/admin 前必须已注册 TOTP + 人脸，否则写操作会永久卡在 step-up。首个账号自动成为 admin。
 
 ## 11. 约定与限制
 

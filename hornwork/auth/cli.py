@@ -93,6 +93,9 @@ def add_parsers(sub) -> None:
     ua.add_argument("--admin", action="store_true")
     ua.add_argument("--password-stdin", action="store_true")
     aus.add_parser("list")
+    sr = aus.add_parser("set-role", help="设置角色（viewer/operator/admin）")
+    sr.add_argument("username")
+    sr.add_argument("role", choices=("viewer", "operator", "admin"))
     us = aus.add_parser("show")
     us.add_argument("username")
     up = aus.add_parser("passwd")
@@ -293,9 +296,19 @@ def _cmd_user(args, eng) -> int:
     if args.user_cmd == "list":
         rows = eng.list_users()
         _json(rows) if args.json else _table(rows, [
-            ("id", "ID"), ("username", "用户名"), ("password_algo", "算法"),
-            ("status", "状态"), ("loa_max", "LOA上限"), ("failed_count", "失败"),
-            ("locked_until", "锁定至"), ("mfa_enabled", "TOTP"), ("last_login_ts", "上次登录")])
+            ("id", "ID"), ("username", "用户名"), ("role", "角色"),
+            ("password_algo", "算法"), ("status", "状态"), ("loa_max", "LOA上限"),
+            ("failed_count", "失败"), ("locked_until", "锁定至"),
+            ("mfa_enabled", "TOTP"), ("last_login_ts", "上次登录")])
+        return 0
+    if args.user_cmd == "set-role":
+        try:
+            res = eng.set_role(args.username, args.role)
+        except ValueError as exc:
+            print(f"[!] {exc}", file=sys.stderr)
+            return 1
+        _json(res) if args.json else print(
+            f"已将 {res['username']} 角色从 {res['old_role']} 改为 {res['role']}")
         return 0
     if args.user_cmd == "show":
         user = eng.get_user(args.username)

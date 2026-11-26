@@ -65,15 +65,22 @@ class AuthEngine:
         phc, algo = password.hash_password(
             user_password, self.keys.pepper, self.argon2_params)
         ts = now_utc()
+        role = "admin" if admin else db.ROLE_DEFAULT
+        # 空库引导：第一个创建的账号自动成为 admin，避免管理接口无人可达。
+        if not admin:
+            n = self.store.query_one("SELECT COUNT(*) AS n FROM auth_user")
+            if not n or int(n["n"]) == 0:
+                role = "admin"
         cur = self.store.execute(
             "INSERT INTO auth_user(username, display_name, password_hash, password_algo,"
-            " password_ts, status, loa_max, created_ts) VALUES(?,?,?,?,?,'active',3,?)",
-            (username, display or username, phc, algo, ts, ts),
+            " password_ts, status, loa_max, role, created_ts)"
+            " VALUES(?,?,?,?,?,?,?,?,?)",
+            (username, display or username, phc, algo, ts, "active", 3, role, ts),
         )
         user_id = int(cur.lastrowid or 0)
         audit.append(self.store, event="user_create", result="ok", username=username,
-                     user_id=user_id, detail=f"algo={algo} admin={admin}")
-        return {"user_id": user_id, "username": username, "algo": algo}
+                     user_id=user_id, detail=f"algo={algo} admin={admin} role={role}")
+        return {"user_id": user_id, "username": username, "algo": algo, "role": role}
 
     def set_password(self, username: str, new_password: str,
                      old_password: str | None = None) -> None:
@@ -102,9 +109,34 @@ class AuthEngine:
 
     def list_users(self) -> list[dict]:
         return self.store.query(
-            "SELECT id, username, display_name, password_algo, status, loa_max,"
+            "SELECT id, username, display_name, password_algo, status, loa_max, role,"
             " failed_count, locked_until, mfa_enabled, last_login_ts FROM auth_user"
             " ORDER BY id")
+
+    def set_role(self, username: str, role: str) -> dict:
+        """设置用户角色。operator/admin 必须已注册 TOTP + 人脸，否则写权限永远卡在 step-up。"""
+        user = self._require_user(username)
+        role = str(role or "").strip().lower()
+        if role not in db.ROLE_VALUES:
+            raise ValueError(f"非法角色：{role}（可选 {', '.join(db.ROLE_VALUES)}）")
+        old = str(user["role"] or db.ROLE_DEFAULT)
+        if role in ("operator", "admin"):
+            missing = []
+            if not totp.active_credential(self.store, int(user["id"])):
+                missing.append("TOTP")
+            if not biometric.has_template(self.store, int(user["id"])):
+                missing.append("人脸模板")
+            if missing:
+                raise ValueError(f"提升为 {role} 前需先注册因子：{'、'.join(missing)}")
+        if old == "admin" and role != "admin":
+            n = self.store.query_one(
+                "SELECT COUNT(*) AS n FROM auth_user WHERE role='admin' AND status='active'")
+            if n and int(n["n"]) <= 1:
+                raise ValueError("不能降级最后一个 admin（否则无人能访问管理接口）")
+        self.store.execute("UPDATE auth_user SET role=? WHERE id=?", (role, int(user["id"])))
+        audit.append(self.store, event="role_change", result="ok", username=username,
+                     user_id=int(user["id"]), detail=f"{old}->{role}")
+        return {"username": username, "role": role, "old_role": old}
 
     def lock_user(self, username: str, reason: str = "manual") -> bool:
         user = self.get_user(username)
@@ -239,7 +271,8 @@ class AuthEngine:
         return None, {"username": username, "user": user, "lockout": lockout, "t0": t0}
 
     def start_login(self, username: str, user_password: str, ip: str | None = None,
-                    device_token: str | None = None, now: float | None = None) -> dict:
+                    device_token: str | None = None, now: float | None = None,
+                    ua: str | None = None) -> dict:
         err, ctx = self._authenticate_password(username, user_password, ip, now)
         if err is not None:
             return err
@@ -291,7 +324,7 @@ class AuthEngine:
             "device_id": device_id, "risk": risk_res,
             "required_loa": required_loa, "degraded": degraded,
             "degrade_reason": degrade_reason, "factors": ["pw"],
-            "totp_ok": False, "totp_counter": 0, "t0": t0,
+            "totp_ok": False, "totp_counter": 0, "t0": t0, "ua": ua,
             "expires": time.time() + ttl,
         }
         return {
@@ -363,7 +396,8 @@ class AuthEngine:
         issued = session.issue(
             self.store, self.keys, int(user["id"]), int(ch["required_loa"]),
             ip=ch["ip"], device_id=ch["device_id"], now=now,
-            policy=self._section("session.ttl"), strong_auth=ch["required_loa"] >= 3)
+            ua=ch.get("ua"), policy=self._section("session.ttl"),
+            strong_auth=ch["required_loa"] >= 3)
         self.store.execute("UPDATE auth_user SET last_login_ts=?, failed_count=0"
                            " WHERE id=?", (now_utc(), int(user["id"])))
         latency = int(round((time.perf_counter() - ch["t0"]) * 1000))
@@ -393,10 +427,10 @@ class AuthEngine:
     def login(self, username: str, user_password: str, ip: str | None = None,
               device_token: str | None = None, totp_code: str | None = None,
               embedding: list[float] | None = None,
-              now: float | None = None) -> dict:
+              now: float | None = None, ua: str | None = None) -> dict:
         """一次性登录（状态机封装）：CLI / 中间件都走这一条路径。"""
         res = self.start_login(username, user_password, ip=ip,
-                               device_token=device_token, now=now)
+                               device_token=device_token, now=now, ua=ua)
         if res["status"] != "totp_required":
             return res
         res = self.advance(res["challenge_id"], totp_code=totp_code, now=now)
@@ -408,7 +442,8 @@ class AuthEngine:
     def login_password_only(self, username: str, user_password: str,
                             ip: str | None = None,
                             embedding: list[float] | None = None,
-                            now: float | None = None) -> dict:
+                            now: float | None = None,
+                            ua: str | None = None) -> dict:
         """平台统一登录：账号 + 口令；人脸为可选因子（提供且匹配则升 LOA3）。
 
         - 不做 TOTP 校验（演示阶段按需求关闭动态码）；
@@ -450,7 +485,7 @@ class AuthEngine:
 
         issued = session.issue(
             self.store, self.keys, int(user["id"]), loa, ip=ip, device_id=None, now=now,
-            policy=self._section("session.ttl"), strong_auth=loa >= 3)
+            ua=ua, policy=self._section("session.ttl"), strong_auth=loa >= 3)
         self.store.execute("UPDATE auth_user SET last_login_ts=?, failed_count=0"
                            " WHERE id=?", (now_utc(), int(user["id"])))
         latency = int(round((time.perf_counter() - t0) * 1000))
@@ -467,16 +502,19 @@ class AuthEngine:
                 "degraded": degraded, "degrade_reason": degrade_reason,
                 "similarity": similarity, "latency_ms": latency, "session": issued}
 
-    def session_row(self, token: str) -> dict:
+    def session_row(self, token: str, *, ua: str | None = None,
+                    request_ip: str | None = None) -> dict:
         self.reload_policy()
         return session.verify(self.store, self.keys, token,
-                              policy=self._section("session.ttl"))
+                              policy=self._section("session.ttl"),
+                              ua=ua, request_ip=request_ip)
 
-    def session_info(self, token: str) -> dict:
-        row = self.session_row(token)
+    def session_info(self, token: str, *, ua: str | None = None) -> dict:
+        row = self.session_row(token, ua=ua)
         user = self.user_by_id(int(row["user_id"])) or {}
         return {"session": row, "user": {
-            "id": user.get("id"), "username": user.get("username")},
+            "id": user.get("id"), "username": user.get("username"),
+            "role": str(user.get("role") or db.ROLE_DEFAULT)},
             "loa": int(row["loa"]), "loa_name": policy.loa_name(int(row["loa"])),
         }
 
@@ -517,20 +555,76 @@ class AuthEngine:
         return {"status": "ok", "loa": 3, "loa_name": policy.loa_name(3),
                 "similarity": sim}
 
+    # ------------------------------------------------------------------ 授权判定
+    def decide(self, row: dict, action: str, role: str, *,
+               request_ip: str | None = None) -> dict:
+        """唯一决策核心：角色白名单 + LOA + 强认证窗口 + IP 漂移风险。
+
+        输入是已通过验签/撤销/过期/UA 校验的会话行，输出统一的 decision 结构。
+        Web 中间件与 CLI 都经由此处，保证「同一语义、同一决策」。
+        """
+        base = {"action": action, "loa": int(row["loa"]), "role": role,
+                "session": row, "risk": None}
+        # 1) 角色白名单（先于 LOA，给出更精确的可诊断 reason）
+        if not policy.role_allows(role, action):
+            return {**base, "decision": "deny", "reason": "role_denied",
+                    "required_role": policy.min_role(action)}
+        # 2) IP 漂移：重算风险但不直接拒绝，交给 3/4 判定
+        risk_ctx = None
+        if request_ip and row.get("ip") and session._ip_prefix(request_ip) != session._ip_prefix(row["ip"]):
+            user = self.user_by_id(int(row["user_id"]))
+            if user:
+                self.reload_policy()
+                risk_ctx = risk.score(
+                    self.store, user, ip=request_ip, device_id=row.get("device_id"),
+                    weights=self._section("risk.weights"))
+        base["risk"] = risk_ctx
+        # 3) IP 漂移达到强认证阈值但会话仍是 LOA2，且该动作要求强认证。
+        #    放在 LOA 门槛之前，给出比 loa_too_low 更精确的可诊断原因。
+        if (risk_ctx and risk_ctx["action"] in ("loa3", "loa3_warn", "lockout")
+                and int(row["loa"]) < 3 and policy.min_loa(action) >= 3):
+            return {**base, "decision": "stepup_required", "reason": "session_ip_drift"}
+        # 4) LOA 门槛
+        if not policy.can(row, action):
+            return {**base, "decision": "stepup_required", "reason": "loa_too_low"}
+        if policy.step_up_required(row, action):
+            return {**base, "decision": "stepup_required", "reason": "strong_auth_expired"}
+        return {**base, "decision": "allow", "reason": "ok"}
+
+    def authorize(self, token: str, action: str, *, role: str | None = None,
+                  ua: str | None = None, request_ip: str | None = None) -> dict:
+        """带请求上下文的授权入口（Web 中间件调用）。
+
+        ``role`` 省略时从会话用户解析（一次 verify，由 session_row 完成），
+        这样 Web 层无需先查用户再授权、避免重复验签。
+        """
+        try:
+            row = self.session_row(token, ua=ua, request_ip=request_ip)
+        except session.SessionError as exc:
+            return {"decision": "deny", "reason": exc.reason, "action": action,
+                    "loa": 0, "role": role or "", "session": None, "risk": None,
+                    "username": None, "user_id": None}
+        if role is None:
+            user = self.user_by_id(int(row["user_id"])) or {}
+            role = str(user.get("role") or db.ROLE_DEFAULT)
+            username = user.get("username")
+            user_id = user.get("id")
+        else:
+            user = self.user_by_id(int(row["user_id"])) or {}
+            username, user_id = user.get("username"), user.get("id")
+        result = self.decide(row, action, role, request_ip=request_ip)
+        result["username"] = username
+        result["user_id"] = int(user_id) if user_id is not None else None
+        return result
+
     def require_action(self, token: str, action: str = "read") -> dict:
-        """中间件口径：返回 allow/stepup_required/deny + 上下文。"""
+        """兼容既有调用（CLI/测试）：从会话用户解析角色，无请求 IP/UA。"""
         try:
             row = self.session_row(token)
         except session.SessionError as exc:
             return {"decision": "deny", "reason": exc.reason}
-        if not policy.can(row, action):
-            return {"decision": "stepup_required", "reason": "loa_too_low",
-                    "loa": int(row["loa"]), "action": action}
-        if policy.step_up_required(row, action):
-            return {"decision": "stepup_required", "reason": "strong_auth_expired",
-                    "loa": int(row["loa"]), "action": action}
-        return {"decision": "allow", "loa": int(row["loa"]), "action": action,
-                "session": row}
+        user = self.user_by_id(int(row["user_id"])) or {}
+        return self.decide(row, action, str(user.get("role") or db.ROLE_DEFAULT))
 
     def logout(self, token: str) -> bool:
         ok = session.revoke_token(self.store, self.keys, token, "logout")

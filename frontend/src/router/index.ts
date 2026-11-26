@@ -132,7 +132,7 @@ export const router = createRouter({
           path: 'auth',
           name: 'auth',
           component: () => import('@/views/AuthView.vue'),
-          meta: { title: '身份认证' },
+          meta: { title: '身份认证', requiresAdmin: true },
         },
         {
           path: 'harden',
@@ -162,6 +162,10 @@ router.beforeEach(async (to) => {
   }
   // 首次进入或刷新后补齐身份信息（LOA 展示依赖它）
   if (!auth.info) await auth.refresh();
+  // 管理页对非 admin 隐藏（仅 UX；真正的边界是后端 403 门禁）
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    return { name: 'overview' };
+  }
   return true;
 });
 

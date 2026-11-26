@@ -9,8 +9,8 @@
 | 项 | 要求 | 说明 |
 |---|---|---|
 | 目标运行环境 | Linux（Ubuntu 24.04/26.04） | 采集/抓包/inotify/内存扫描/控制面 socket 都依赖 Linux |
-| Python | **3.11+** | `pyproject.toml` 的 `requires-python = ">=3.11"`；`scripts/setup.sh` 按发行版准备 3.12+ |
-| 三方依赖 | `yara-python==4.5.4`、`PyYAML==6.0.3` | 只有这两个；其余全部标准库 |
+| Python | **3.11+** | `pyproject.toml` 的 `requires-python = ">=3.11"`；CI 覆盖 3.11 / 3.12 / 3.13 / 3.14，基准实测 3.14；`scripts/setup.sh` 按发行版准备 3.12+ |
+| 三方依赖 | 运行期 `yara-python==4.5.4`、`PyYAML==6.0.3`；可选 extra `auth`（argon2-cffi / cryptography）、`dev`（ruff） | 统一由 `pyproject.toml` 声明；开发安装见 §3.2 |
 | 外部二进制（可选） | `nmap`、`dpkg-query`、`lynis`、`testssl.sh`、`nuclei`、`clamd`、`auditd`、`avml`、`vol` | 缺失时对应能力降级/跳过，不影响主流程 |
 | 开发机 | Windows / macOS 也可 | 只能跑纯逻辑单测；Linux 专属用例自动跳过（见 §3.3） |
 
@@ -30,7 +30,7 @@ CONFIG  ?= $(HORNWORK_HOME)/config.toml
 hornwork/
 ├── hornwork/                  # 平台代码（Python 包，入口 hornworkctl = hornwork.cli:main）
 │   ├── daemon.py              # 装配：采集器/引擎/总线/存储/控制面/Web，全部线程与协程都在这里启动
-│   ├── cli.py                 # hornworkctl 全部子命令（argparse）
+│   ├── cli.py                 # hornworkctl 入口：注册子命令、参数归一化、调度（见 § cli-modularization）
 │   ├── bus.py                 # 进程内事件总线（asyncio.Queue、背压、DLQ 回调）
 │   ├── schema.py              # CanonicalEvent / DetectionAlert / 校验 / 时间与序列化
 │   ├── store.py               # SQLite(WAL) 访问层与核心 DDL
@@ -88,10 +88,10 @@ sudo systemctl enable --now hornwork
 ### 3.2 本机开发（Linux 或 Windows 均可用）
 
 ```bash
-# 建虚拟环境并安装依赖（只装 hornwork + 两个三方库）
+# 建虚拟环境并安装依赖（运行期 + 认证/加固 + ruff，均由 pyproject.toml extras 声明）
 python -m venv .venv
 . .venv/bin/activate                 # Windows PowerShell: .venv\Scripts\Activate.ps1
-pip install -e .                     # 装 yara-python / PyYAML 并注册 hornworkctl 命令
+pip install -e '.[auth,dev]'         # 装运行期依赖、认证/加固依赖与 ruff，并注册 hornworkctl 命令
 
 # 验证 import（Windows 上不应因 Linux 调用报错）
 python -c "import hornwork, hornwork.daemon, hornwork.cli; print(hornwork.__version__)"
@@ -140,11 +140,30 @@ make lint
 
 - 测试全部用 `unittest`，没有 pytest 依赖；在**仓库根目录**运行
   `python -m unittest discover -s tests`，当前工作目录会自动进入 `sys.path`。
-- `tests/` 下 16 个模块覆盖：核心 schema/store/bus、采集器、规则、引擎、扫描、
-  CVE/CVSS、情报/响应、验证/Web、lab、auth、harden、版本号。
+- `tests/` 下的模块覆盖：核心 schema/store/bus、采集器、规则、引擎、扫描、
+  CVE/CVSS、情报/响应、验证/Web、lab、auth、harden、版本号、CLI 布局与入口（smoke）。
 - 需要 root/yara/外部二进制的用例用 `unittest.skipUnless` 自动跳过，跳过不是失败。
 - 改了接口（函数签名、数据结构、表结构）时，先改 `docs/CONTRACT.md` 再改实现，
   并同步更新 `docs/interfaces.md`。
+
+### 4.1 测试的环境假设与降级契约
+
+整套测试**不要求 root，也不要求免密 sudo**，可在普通用户、Windows/macOS 开发机上跑。
+相关行为由代码与用例共同保证：
+
+- **Linux 专属能力**（AF_PACKET 抓包、inotify、`/proc/pid/mem`、控制面 Unix socket、
+  auditd/authlog 跟随）在非 Linux 上自动跳过；跳过数（当前 3 项）属正常，不是失败。
+- **外部二进制缺失**（`yara`、`nmap`、`lynis`、`dpkg-query` 等）时对应用例自动跳过或降级，
+  不影响主流程；CI 仅预装 `yara-python` / `PyYAML` 与 `auth` extra。
+- **`harden` 子系统的 `core.sh()` 降级契约**：以普通用户执行时，先尝试 `sudo -n`；
+  若无免密 sudo，则降级为当前用户直接执行。因此只读命令（如 `openssl` 证书解析）在无
+  sudo 环境仍可工作；真正需要 root 的写操作会自然失败并以返回码 `rc` 交给调用方判断，
+  **不会静默返回空结果**。依赖该契约的用例（证书解析、签名校验）因此能在普通用户下通过。
+- **并发与锁相关回归**（审计链原子写、`FlowTable` 淘汰）用 daemon 线程 + 超时判定，
+  即使回归也不会挂住测试进程。
+- **入口 smoke**（`tests/test_entrypoint.py`）：`python -m hornwork.cli --version/--help`
+  始终验证；`hornworkctl` 脚本入口在 `shutil.which` 找得到时验证。CI 在
+  `pip install -e .` 后另用显式步骤调用 `hornworkctl --version`，确保安装入口纳入门禁。
 
 ## 5. 代码风格与约定
 

@@ -67,6 +67,35 @@ export class ApiError extends Error {
     this.body = body;
   }
 
+  /** 403 需要提升认证等级：会话有效，不能当作掉登录处理。 */
+  get isStepUp(): boolean {
+    if (this.code !== 403) return false;
+    const reason = (this.body as { detail?: string } | null)?.detail;
+    if (typeof reason === 'string') {
+      try {
+        return ['stepup_required', 'loa_too_low', 'strong_auth_expired', 'session_ip_drift']
+          .includes(JSON.parse(reason).reason);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /** 403 角色不足：同样不能当作掉登录处理。 */
+  get isRoleDenied(): boolean {
+    if (this.code !== 403) return false;
+    const reason = (this.body as { detail?: string } | null)?.detail;
+    if (typeof reason === 'string') {
+      try {
+        return JSON.parse(reason).reason === 'role_denied';
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   static from(error: unknown): ApiError {
     if (error instanceof ApiError) return error;
     if (axios.isAxiosError(error)) {
