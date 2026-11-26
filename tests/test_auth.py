@@ -441,5 +441,90 @@ class EngineLoginTest(AuthTestBase):
         self.assertEqual(res["bad_id"], row["id"])
 
 
+class ConsoleAuditChainTest(AuthTestBase):
+    """第[0]步回归：console_* 访问审计的原子追加（BUG-03 同款并发/跨进程竞态）。
+
+    非 console_* 的身份事件仍走原路径，这里只验证新路径的链完整性。
+    """
+
+    def _append(self, n: int) -> None:
+        for i in range(n):
+            audit.append(self.store, event="console_access", result="ok",
+                         username="probe", factor="read", detail=f"i={i}")
+
+    def test_console_append_keeps_chain_intact(self) -> None:
+        self._append(20)
+        res = audit.verify_chain(self.store)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["checked"], 20)
+        rows = self.store.query(
+            "SELECT prev_hash, row_hash FROM auth_audit WHERE event='console_access' ORDER BY id")
+        self.assertEqual(rows[0]["prev_hash"], audit.GENESIS)
+        for before, after in zip(rows, rows[1:], strict=False):
+            self.assertEqual(after["prev_hash"], before["row_hash"])
+
+    def test_console_append_is_atomic_across_threads(self) -> None:
+        """8 线程并发写 console_access，链必须完整且 prev_hash 无重复。"""
+        import threading
+
+        threads: list[threading.Thread] = []
+        errors: list[str] = []
+
+        def writer(n: int) -> None:
+            try:
+                for i in range(25):
+                    audit.append(self.store, event="console_access", result="ok",
+                                 username=f"t{n}", factor="read", detail=f"{n}-{i}")
+            except Exception as exc:  # noqa: BLE001 - 线程内异常收集到主线程断言
+                errors.append(repr(exc))
+
+        for n in range(8):
+            t = threading.Thread(target=writer, args=(n,), daemon=True)
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+            self.assertFalse(t.is_alive(), "并发写线程未按时结束")
+
+        self.assertEqual(errors, [], errors)
+        rows = self.store.query("SELECT prev_hash FROM auth_audit WHERE event='console_access'")
+        self.assertEqual(len(rows), 200)
+        self.assertEqual(len({r["prev_hash"] for r in rows}), 200,
+                         "出现重复 prev_hash，说明并发写者读到了同一链头")
+        self.assertTrue(audit.verify_chain(self.store)["ok"])
+
+    def test_console_append_is_atomic_across_processes(self) -> None:
+        """子进程 + 主进程各写审计（跨 SQLite 写锁），链必须完整。"""
+        import subprocess
+        import sys
+
+        db_path = str(self.store.path)
+        script = (
+            "import sys; sys.path.insert(0, r'{root}'); "
+            "from hornwork.auth import audit, db; "
+            "cfg={{'general':{{'data_dir':r'{tmp}'}},"
+            "'auth':{{'db_path':r'{db}','key_path':r'{key}',"
+            "'pepper_path':r'{pepper}'}}}}; "
+            "s=db.open_auth_store(cfg); "
+            "[audit.append(s,event='console_access',result='ok',username='proc',"
+            "factor='read',detail='p'+str(i)) for i in range(30)]; s.close()"
+        ).format(
+            root=str(Path(__file__).resolve().parent.parent).replace("\\", "\\\\"),
+            tmp=str(self.tmp).replace("\\", "\\\\"),
+            db=db_path.replace("\\", "\\\\"),
+            key=str(self.tmp / "auth.key").replace("\\", "\\\\"),
+            pepper=str(self.tmp / "auth.pepper").replace("\\", "\\\\"),
+        )
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                              text=True, timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self._append(30)
+        rows = self.store.query("SELECT prev_hash FROM auth_audit WHERE event='console_access'")
+        self.assertEqual(len(rows), 60)
+        self.assertEqual(len({r["prev_hash"] for r in rows}), 60,
+                         "跨进程出现重复 prev_hash，BEGIN IMMEDIATE 未生效")
+        self.assertTrue(audit.verify_chain(self.store)["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

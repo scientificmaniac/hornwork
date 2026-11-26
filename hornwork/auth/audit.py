@@ -34,25 +34,64 @@ def chain_head(store) -> str:
     return str(row["row_hash"]) if row else (head or GENESIS)
 
 
-def append(store, *, event: str, result: str, username: str | None = None,
-           user_id: int | None = None, factor: str | None = None,
-           loa: int | None = None, risk_score: int | None = None,
-           risk_why: Any = None, ip: str | None = None,
-           device_id: str | None = None, latency_ms: int | None = None,
-           detail: str | None = None, ts: str | None = None) -> int:
-    """写一条审计（幂等失败不抛给调用方之外的路径；调用方应保证一定写入）。"""
-    ts = ts or now_utc()
-    if isinstance(risk_why, (list, dict)):
-        risk_why = json.dumps(risk_why, ensure_ascii=False)
-    prev = chain_head(store)
-    fields = {
+def _build_fields(*, event: str, result: str, username: str | None = None,
+                  user_id: int | None = None, factor: str | None = None,
+                  loa: int | None = None, risk_score: int | None = None,
+                  risk_why: Any = None, ip: str | None = None,
+                  device_id: str | None = None, latency_ms: int | None = None,
+                  detail: str | None = None, ts: str | None = None,
+                  prev: str) -> dict[str, Any]:
+    """构造规范化审计字段并计算 row_hash（纯函数，不含任何 IO）。
+
+    调用方负责归一化 ``ts`` 与 ``risk_why``；此处不再重复，以保证 builder 可在
+    事务内被调用而不产生非确定性。
+    """
+    fields: dict[str, Any] = {
         "ts": ts, "username": username, "user_id": user_id, "event": event,
         "factor": factor, "result": result, "loa": loa,
         "risk_score": risk_score, "risk_why": risk_why, "ip": ip,
         "device_id": device_id, "latency_ms": latency_ms, "detail": detail,
         "prev_hash": prev,
     }
-    row_hash = _hash_row(fields, prev)
+    fields["row_hash"] = _hash_row(fields, prev)
+    return fields
+
+
+def append(store, *, event: str, result: str, username: str | None = None,
+           user_id: int | None = None, factor: str | None = None,
+           loa: int | None = None, risk_score: int | None = None,
+           risk_why: Any = None, ip: str | None = None,
+           device_id: str | None = None, latency_ms: int | None = None,
+           detail: str | None = None, ts: str | None = None) -> int:
+    """写一条审计。
+
+    ``console_*``（Web 访问审计）走 ``store.auth_audit_append_atomic``：读链头、
+    算哈希、INSERT、推进链头全在同一 SQLite 写事务内，消除命令行/多线程/多进程
+    并发写者读到同一 prev_hash 的断链竞态（与 action_audit 的 BUG-03 同款）。
+
+    身份类事件（logon/logon_fail/...）暂走原路径，缩小回归面；后续单独迁移。
+    """
+    # 归一化只做一次：ts 默认值与 risk_why 的 JSON 化都在事务外完成，
+    # 传入 _build_fields 时不再重复，保证 builder 是纯函数。
+    ts = ts or now_utc()
+    if isinstance(risk_why, (list, dict)):
+        risk_why = json.dumps(risk_why, ensure_ascii=False)
+
+    def build(prev: str) -> dict[str, Any]:
+        return _build_fields(
+            event=event, result=result, username=username, user_id=user_id,
+            factor=factor, loa=loa, risk_score=risk_score, risk_why=risk_why,
+            ip=ip, device_id=device_id, latency_ms=latency_ms, detail=detail,
+            ts=ts, prev=prev,
+        )
+
+    if str(event).startswith("console_"):
+        # prev 必须由事务内读到的链头决定，不能在外层先算哈希。
+        return append_atomic(store, build)
+
+    prev = chain_head(store)
+    fields = build(prev)
+    row_hash = fields["row_hash"]
     cur = store.execute(
         "INSERT INTO auth_audit(ts, username, user_id, event, factor, result, loa,"
         " risk_score, risk_why, ip, device_id, latency_ms, detail, prev_hash, row_hash)"
@@ -62,6 +101,15 @@ def append(store, *, event: str, result: str, username: str | None = None,
     )
     store.set_meta(db.CHAIN_HEAD_KEY, row_hash)
     return int(cur.lastrowid or 0)
+
+
+def append_atomic(store, build_fields) -> int:
+    """原子追加：``build_fields(prev_hash)`` 在事务内被调用，返回完整字段字典。
+
+    prev_hash 一定来自事务内读到的真实链头，彻底消除竞态；调用方只需保证
+    build_fields 是纯计算（不访问 store）。事务实现在 store 层。
+    """
+    return store.auth_audit_append_atomic(build_fields)
 
 
 def verify_chain(store, limit: int | None = None) -> dict[str, Any]:

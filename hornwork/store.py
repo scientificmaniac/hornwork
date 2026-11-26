@@ -667,6 +667,69 @@ class Store:
     def audit_rows(self) -> list[dict]:
         return self.query("SELECT * FROM action_audit ORDER BY seq ASC")
 
+    # ------------------------------------------------------------------ 认证审计链
+    # auth_audit 独立链，与 action_audit 不共享链头（见hornwork/auth/audit.py）。
+    # 这里的原子追加修复与 BUG-03 同款竞态：读链头→算哈希→落库必须在同一
+    # SQLite 写事务内完成，否则多线程/多进程写者会读到相同 prev_hash 而断链。
+    AUTH_AUDIT_INSERT = (
+        "INSERT INTO auth_audit(ts, username, user_id, event, factor, result, loa,"
+        " risk_score, risk_why, ip, device_id, latency_ms, detail, prev_hash, row_hash)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    )
+
+    def auth_audit_head_locked(self) -> str:
+        """读 auth_audit 链头；调用方必须已持有 self._lock（且在事务内）。
+
+        Genesis 常量在此重复定义（而非导入 auth.audit）以避免 store → auth 的循环依赖；
+        64 个 '0' 与 auth.audit.GENESIS 保持一致。
+        """
+        last = self.conn.execute(
+            "SELECT row_hash FROM auth_audit ORDER BY id DESC LIMIT 1").fetchone()
+        if last is not None:
+            return str(last["row_hash"])
+        row = self.conn.execute("SELECT v FROM meta WHERE k=?", ("auth.audit_head",)).fetchone()
+        return str(row["v"]) if row else ("0" * 64)
+
+    def auth_audit_append_atomic(self, build_fields) -> int:
+        """在单一写事务内追加 auth_audit 行并推进链头。
+
+        ``build_fields(prev_hash)`` 是一个纯函数回调，接收事务内读到的真实链头，
+        返回包含 ``row_hash`` 的完整字段字典。哈希必须由事务内的 prev_hash 计算，
+        否则会重新引入「读到同一链头」的竞态。
+
+        全程直接操作 ``self.conn``：不能调用 ``execute()`` / ``set_meta()``，
+        它们会各自 ``commit()`` 从而提前结束事务、破坏原子性。
+
+        ``BEGIN IMMEDIATE`` 同时挡住进程内线程（self._lock）与跨进程写者
+        （SQLite 写锁 + busy_timeout=15s）。
+        """
+        with self._lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                prev = self.auth_audit_head_locked()
+                fields = build_fields(prev)
+                row_hash = str(fields["row_hash"])
+                cur = self.conn.execute(
+                    self.AUTH_AUDIT_INSERT,
+                    (
+                        fields.get("ts"), fields.get("username"), fields.get("user_id"),
+                        fields.get("event"), fields.get("factor"), fields.get("result"),
+                        fields.get("loa"), fields.get("risk_score"), fields.get("risk_why"),
+                        fields.get("ip"), fields.get("device_id"), fields.get("latency_ms"),
+                        fields.get("detail"), prev, row_hash,
+                    ),
+                )
+                self.conn.execute(
+                    "INSERT INTO meta(k,v) VALUES(?,?) "
+                    "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                    ("auth.audit_head", row_hash),
+                )
+                self.conn.commit()
+                return int(cur.lastrowid or 0)
+            except Exception:
+                self.conn.rollback()
+                raise
+
     # ------------------------------------------------------------------ 验证
     def insert_validation(self, rec: dict) -> None:
         self.execute(
